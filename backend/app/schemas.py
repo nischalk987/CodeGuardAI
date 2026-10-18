@@ -6,6 +6,16 @@ Severity = Literal["critical", "high", "medium", "low"]
 FindingSource = Literal["static", "ai"]
 
 
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    request_id: str
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorDetail
+
+
 class Finding(BaseModel):
     id: str
     severity: Severity
