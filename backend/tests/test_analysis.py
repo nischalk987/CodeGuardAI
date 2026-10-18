@@ -34,6 +34,19 @@ def test_builtin_fixture_findings_are_deterministic_and_normalized() -> None:
     ]
 
 
+def test_builtin_analyzes_source_in_memory_with_repository_relative_path() -> None:
+    source = 'password = "private-value"\nresult = eval(user_input)\n'
+
+    findings = BuiltinAnalyzer().analyze_source(source, "src/auth.py")
+
+    assert [finding.file_path for finding in findings] == ["src/auth.py", "src/auth.py"]
+    assert [finding.start_line for finding in findings] == [1, 2]
+    assert [finding.rule_id for finding in findings] == [
+        "CG.SEC.HARDCODED_CREDENTIAL",
+        "CG.SEC.DYNAMIC_EXECUTION",
+    ]
+
+
 def test_builtin_ignores_requested_directory_and_safe_fixture_is_clean(tmp_path: Path) -> None:
     ignored = tmp_path / "ignored"
     ignored.mkdir()

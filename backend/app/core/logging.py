@@ -19,6 +19,11 @@ def _redact_text(value: str) -> str:
     return _ASSIGNMENT.sub(r"\1[REDACTED]", value)
 
 
+def redact_sensitive_text(value: str) -> str:
+    """Redact common inline credentials before source evidence is persisted or logged."""
+    return _redact_text(value)
+
+
 def _safe_value(value: Any, key: str = "") -> Any:
     if key and _SENSITIVE_KEY.search(key):
         return "[REDACTED]"

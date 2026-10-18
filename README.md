@@ -8,7 +8,7 @@
 
 ---
 
-> **Project status: Early MVP in progress.** The React dashboard and FastAPI sample endpoints are implemented, along with backend configuration, structured logging, CORS, consistent JSON errors, and health checks. Local deterministic scanning and an optional Semgrep CLI analyzer are implemented. Groq review is available through an explicit single-file CLI opt-in; dashboard scanning, persistence, and GitHub PR review remain in progress.
+> **Project status: Early MVP in progress.** The React dashboard and FastAPI sample endpoints are implemented, along with backend configuration, structured logging, CORS, consistent JSON errors, and health checks. Local deterministic scanning, an optional Semgrep CLI analyzer, and a PostgreSQL-backed review API are implemented. Groq review is available through an explicit single-file CLI opt-in; dashboard submission and GitHub PR review remain in progress.
 
 ## Why CodeGuard AI?
 
@@ -111,7 +111,7 @@ CodeGuardAI/
 └── README.md
 ```
 
-This shows the current implementation. Persistence and worker modules remain future work.
+This shows the current implementation. Background workers remain future work.
 
 ## Getting started
 
@@ -127,10 +127,11 @@ python -m venv .venv
 # macOS/Linux:
 # source .venv/bin/activate
 python -m pip install -e ".[dev]"
+# Set DATABASE_URL privately in backend/.env to enable persisted review routes.
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API docs are available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). The sample endpoint is `GET /api/v1/reviews/demo`.
+The API docs are available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). The labelled sample endpoint is `GET /api/v1/reviews/demo`. Configure `DATABASE_URL` privately in `backend/.env`, verify the target database, and run `alembic upgrade head` from `backend/` to enable persistent review routes. Review creation scans a bounded snippet with local deterministic checks; it does not call AI or execute submitted code.
 
 **2. Start the frontend** (Node.js 20+):
 
@@ -142,7 +143,7 @@ npm run dev
 
 Open the Vite URL shown in the terminal, usually [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI attempts to load the backend's sample review and falls back to local sample data when the API is unavailable.
 
-Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. The backend CLI scans local files with deterministic checks and can optionally invoke Semgrep. AI review requires the explicit `--ai-review` flag for a single file and discloses that the file will be sent to Groq. Full usage and exit codes are documented in [backend/README.md](backend/README.md#local-cli-scanning).
+Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. The backend API and CLI run local deterministic checks and can optionally invoke Semgrep. AI review requires the explicit `--ai-review` flag for a single file and discloses that the file will be sent to Groq. Full usage and exit codes are documented in [backend/README.md](backend/README.md#local-cli-scanning).
 
 ### Dashboard preview
 

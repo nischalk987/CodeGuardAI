@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr | None = Field(
         default=None, validation_alias="GROQ_API_KEY", repr=False
     )
+    database_url: SecretStr | None = Field(
+        default=None, validation_alias="DATABASE_URL", repr=False
+    )
     groq_model: str = Field(
         default="openai/gpt-oss-20b", validation_alias="GROQ_MODEL", min_length=1, max_length=128
     )
@@ -51,6 +54,27 @@ class Settings(BaseSettings):
             value = value.strip()
             return value or None
         return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def validate_database_url(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("DATABASE_URL must be a PostgreSQL URL")
+        try:
+            parsed = urlsplit(value.strip())
+            hostname = parsed.hostname
+            database = unquote(parsed.path.lstrip("/"))
+        except ValueError:
+            raise ValueError("DATABASE_URL must be a valid PostgreSQL URL") from None
+        if (
+            parsed.scheme not in {"postgresql", "postgresql+psycopg"}
+            or not hostname
+            or not database
+        ):
+            raise ValueError("DATABASE_URL must point to a PostgreSQL database")
+        return value.strip()
 
     @field_validator("groq_model")
     @classmethod

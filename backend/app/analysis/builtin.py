@@ -88,36 +88,53 @@ class BuiltinAnalyzer:
                 source = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
                 raise AnalyzerError(f"Unable to read source file {relative}: {exc.strerror or 'I/O error'}") from None
-            for line_number, line in enumerate(source.splitlines(), start=1):
-                for rule_id, severity, category, pattern, message, fix in _RULES:
-                    match = pattern.search(line)
-                    if not match:
-                        continue
-                    if rule_id == "CG.SEC.HARDCODED_CREDENTIAL":
-                        value = match.group(2).strip().lower()
-                        if value in _PLACEHOLDERS or value.startswith(("your_", "your-")):
-                            continue
-                    findings.append(
-                        Finding(
-                            rule_id=rule_id,
-                            source=FindingSource.STATIC,
-                            severity=severity,
-                            category=category,
-                            message=message,
-                            file_path=relative,
-                            start_line=line_number,
-                            end_line=line_number,
-                            confidence=85,
-                            evidence=line.strip()[:500],
-                            analyzer_name=self.name,
-                            analyzer_version=self.version,
-                            suggested_fix=fix,
-                        )
-                    )
+            findings.extend(self._analyze_source(source, relative))
 
         if target.is_file() and supported_count == 0:
             suffix = target.suffix or "(no extension)"
             raise AnalyzerError(f"Unsupported file type {suffix}; supported: {', '.join(sorted(SUPPORTED_SUFFIXES))}")
+        return findings
+
+    def analyze_source(self, source: str, file_path: str) -> list[Finding]:
+        """Analyze bounded source text without writing it to disk or executing it."""
+        path = Path(file_path)
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+            raise AnalyzerError(
+                f"Unsupported file type {path.suffix or '(no extension)'}; "
+                f"supported: {', '.join(sorted(SUPPORTED_SUFFIXES))}"
+            )
+        if len(source.encode("utf-8")) > MAX_FILE_BYTES:
+            raise AnalyzerError(f"Source exceeds the {MAX_FILE_BYTES} byte file limit")
+        return self._analyze_source(source, path.as_posix())
+
+    def _analyze_source(self, source: str, relative: str) -> list[Finding]:
+        findings: list[Finding] = []
+        for line_number, line in enumerate(source.splitlines(), start=1):
+            for rule_id, severity, category, pattern, message, fix in _RULES:
+                match = pattern.search(line)
+                if not match:
+                    continue
+                if rule_id == "CG.SEC.HARDCODED_CREDENTIAL":
+                    value = match.group(2).strip().lower()
+                    if value in _PLACEHOLDERS or value.startswith(("your_", "your-")):
+                        continue
+                findings.append(
+                    Finding(
+                        rule_id=rule_id,
+                        source=FindingSource.STATIC,
+                        severity=severity,
+                        category=category,
+                        message=message,
+                        file_path=relative,
+                        start_line=line_number,
+                        end_line=line_number,
+                        confidence=85,
+                        evidence=line.strip()[:500],
+                        analyzer_name=self.name,
+                        analyzer_version=self.version,
+                        suggested_fix=fix,
+                    )
+                )
         return findings
 
 
