@@ -29,6 +29,8 @@ def test_invalid_environment_and_log_level_are_rejected() -> None:
         Settings(_env_file=None, environment="staging")  # type: ignore[arg-type]
     with pytest.raises(ValidationError):
         Settings(_env_file=None, log_level="TRACE")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ai_provider="openai")  # type: ignore[arg-type]
 
 
 def test_development_uses_local_frontend_defaults() -> None:
@@ -61,6 +63,33 @@ def test_groq_settings_load_from_environment_without_exposing_api_key(
     assert settings.ai_review_max_input_bytes == 8192
     assert test_key not in repr(settings)
     assert test_key not in settings.model_dump_json()
+
+
+def test_ai_provider_defaults_to_groq_and_huggingface_settings_are_secret_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "hf_test_only_do_not_use"
+    monkeypatch.setenv("AI_PROVIDER", "huggingface")
+    monkeypatch.setenv("HF_TOKEN", token)
+    monkeypatch.setenv("HF_MODEL", "openai/gpt-oss-20b")
+    monkeypatch.setenv("HF_TIMEOUT_SECONDS", "9.5")
+    monkeypatch.setenv("HF_MAX_RETRIES", "1")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "huggingface"
+    assert settings.hf_token is not None
+    assert settings.hf_token.get_secret_value() == token
+    assert settings.hf_model == "openai/gpt-oss-20b"
+    assert settings.hf_timeout_seconds == 9.5
+    assert settings.hf_max_retries == 1
+    assert token not in repr(settings)
+    assert token not in settings.model_dump_json()
+
+
+def test_ai_provider_defaults_to_groq_without_provider_environment(monkeypatch) -> None:
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    assert Settings(_env_file=None).ai_provider == "groq"
 
 
 def test_blank_groq_key_is_treated_as_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,6 +135,11 @@ def test_invalid_database_urls_are_rejected(value: str) -> None:
     "overrides",
     [
         {"groq_model": " "},
+        {"hf_model": " "},
+        {"hf_timeout_seconds": 0},
+        {"hf_timeout_seconds": 121},
+        {"hf_max_retries": -1},
+        {"hf_max_retries": 4},
         {"groq_timeout_seconds": 0},
         {"groq_timeout_seconds": 121},
         {"groq_max_retries": -1},

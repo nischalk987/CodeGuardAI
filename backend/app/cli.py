@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--ai-review",
         action="store_true",
-        help="explicitly send one source file to Groq for advisory AI review",
+        help="explicitly send one source file to the configured provider for advisory AI review",
     )
     return parser
 
@@ -87,8 +87,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             for analyzer in analyzers
             for finding in analyzer.analyze(target, ignored_paths=args.ignore)
         ]
+        ai_provider: str | None = None
         if args.ai_review:
-            ai_findings = _run_ai_review(target)
+            ai_findings, ai_provider = _run_ai_review(target)
             findings.extend(ai_findings)
     except (AnalyzerError, OSError) as exc:
         print(f"codeguard: {exc}", file=sys.stderr)
@@ -99,9 +100,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     groups = _group_findings(findings)
     if args.format == "json":
-        print(json.dumps(_report(target, analyzers, groups, ai_review_requested=args.ai_review), indent=2, sort_keys=True))
+        print(json.dumps(_report(target, analyzers, groups, ai_review_requested=args.ai_review, ai_provider=ai_provider), indent=2, sort_keys=True))
     else:
-        _print_text(target, analyzers, groups, ai_review_requested=args.ai_review)
+        _print_text(target, analyzers, groups, ai_review_requested=args.ai_review, ai_provider=ai_provider)
     threshold = None if args.fail_on == "none" else Severity(args.fail_on)
     if threshold and any(
         _SEVERITY_ORDER[finding.severity] >= _SEVERITY_ORDER[threshold]
@@ -111,9 +112,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _run_ai_review(target: Path) -> list[Finding]:
+def _run_ai_review(target: Path) -> tuple[list[Finding], str]:
     from app.analysis.builtin import MAX_FILE_BYTES, SUPPORTED_SUFFIXES
-    from app.infrastructure.ai.groq_reviewer import GroqAIReviewer
+    from app.infrastructure.ai.factory import configured_provider, create_ai_reviewer
     from pydantic import ValidationError
 
     if target.suffix.lower() not in SUPPORTED_SUFFIXES:
@@ -124,8 +125,13 @@ def _run_ai_review(target: Path) -> list[Finding]:
         settings = get_settings()
     except ValidationError:
         raise AnalyzerError("AI review environment settings are invalid; check backend configuration") from None
-    if settings.groq_api_key is None:
-        raise AnalyzerError("AI review is opt-in and requires GROQ_API_KEY in the backend environment")
+    provider_name, model = configured_provider(settings)
+    configured_secret = settings.groq_api_key if settings.ai_provider == "groq" else settings.hf_token
+    required_variable = "GROQ_API_KEY" if settings.ai_provider == "groq" else "HF_TOKEN"
+    if configured_secret is None:
+        raise AnalyzerError(
+            f"AI_PROVIDER={settings.ai_provider} requires {required_variable} in the backend environment"
+        )
     if target.stat().st_size > min(MAX_FILE_BYTES, settings.ai_review_max_input_bytes):
         raise AnalyzerError("AI review input exceeds the configured per-file size limit")
     try:
@@ -137,21 +143,30 @@ def _run_ai_review(target: Path) -> list[Finding]:
         file_path = target.relative_to(working_directory).as_posix()
     except ValueError:
         file_path = target.name
-    reviewer = GroqAIReviewer(settings)
+    reviewer = create_ai_reviewer(settings)
     print(
-        "AI review opted in: this source file will be sent to Groq for advisory analysis. "
+        f"AI review opted in: this source file will be sent to {provider_name} for advisory analysis. "
         "No other file will be sent.",
         file=sys.stderr,
     )
-    findings = asyncio.run(reviewer.review(file_path=file_path, source_code=source_code))
+    async def review_and_close() -> list[Finding]:
+        try:
+            return await reviewer.review(file_path=file_path, source_code=source_code)
+        finally:
+            close = getattr(reviewer, "aclose", None)
+            if close is not None:
+                await close()
+
+    findings = asyncio.run(review_and_close())
+    provider_slug = "huggingface" if settings.ai_provider == "huggingface" else "groq"
     return [
         replace(
             finding,
-            analyzer_name="groq-ai-reviewer",
-            analyzer_version=f"{settings.groq_model}/v1",
+            analyzer_name=f"{provider_slug}-ai-reviewer",
+            analyzer_version=f"{model}/v1",
         )
         for finding in findings
-    ]
+    ], provider_name
 
 
 def _group_findings(findings: Sequence[Finding]) -> list[list[Finding]]:
@@ -193,6 +208,7 @@ def _report(
     groups: list[list[Finding]],
     *,
     ai_review_requested: bool,
+    ai_provider: str | None = None,
 ) -> dict[str, object]:
     totals = Counter(finding.severity.value for group in groups for finding in group)
     return {
@@ -206,9 +222,9 @@ def _report(
             "source_uploaded": ai_review_requested,
             "ai_review": {
                 "requested": ai_review_requested,
-                "provider": "Groq" if ai_review_requested else None,
+                "provider": ai_provider if ai_review_requested else None,
                 "disclosure": (
-                    "One source file was sent to Groq after explicit --ai-review opt-in"
+                    f"One source file was sent to {ai_provider} after explicit --ai-review opt-in"
                     if ai_review_requested
                     else "not requested; no source file was sent"
                 ),
@@ -238,9 +254,10 @@ def _print_text(
     groups: list[list[Finding]],
     *,
     ai_review_requested: bool,
+    ai_provider: str | None = None,
 ) -> None:
     names = ", ".join(analyzer.name for analyzer in analyzers)
-    upload_note = "yes (one file to Groq, explicit opt-in)" if ai_review_requested else "no"
+    upload_note = f"yes (one file to {ai_provider}, explicit opt-in)" if ai_review_requested else "no"
     print(f"CodeGuard local scan: {target}\nAnalyzers: {names} | Source uploaded: {upload_note}")
     if not groups:
         print("No findings.")

@@ -95,7 +95,7 @@ def test_ai_review_requires_explicit_opt_in_and_discloses_single_file_upload(
 ) -> None:
     from app.core.config import Settings
     from app.domain import Finding, FindingSource, Severity
-    import app.infrastructure.ai.groq_reviewer as groq_adapter
+    import app.infrastructure.ai.factory as ai_factory
 
     settings = Settings(_env_file=None, environment="test", groq_api_key="mock-key")
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
@@ -123,7 +123,7 @@ def test_ai_review_requires_explicit_opt_in_and_discloses_single_file_upload(
                 )
             ]
 
-    monkeypatch.setattr(groq_adapter, "GroqAIReviewer", MockReviewer)
+    monkeypatch.setattr(ai_factory, "create_ai_reviewer", lambda _settings: MockReviewer(_settings))
     target = FIXTURES / "safe_sample.py"
     status = cli.main(["scan", str(target), "--ai-review", "--format", "json"])
     captured = capsys.readouterr()
@@ -135,9 +135,44 @@ def test_ai_review_requires_explicit_opt_in_and_discloses_single_file_upload(
     assert reviewed["file_path"].endswith("safe_sample.py")
     assert report["scan"]["source_uploaded"] is True
     assert report["scan"]["ai_review"]["requested"] is True
+    assert report["scan"]["ai_review"]["provider"] == "Groq"
     ai_finding = report["finding_groups"][0]["findings"][0]
     assert ai_finding["source"] == "ai"
     assert ai_finding["analyzer_name"] == "groq-ai-reviewer"
+
+
+def test_ai_review_uses_configured_huggingface_provider(monkeypatch, capsys) -> None:
+    from app.core.config import Settings
+    import app.infrastructure.ai.factory as ai_factory
+
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ai_provider="huggingface",
+        hf_token="mock-token",
+        hf_model="openai/gpt-oss-20b",
+    )
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    reviewed = {}
+
+    class MockReviewer:
+        async def review(self, *, file_path, source_code):
+            reviewed.update(file_path=file_path, source_code=source_code)
+            return []
+
+    monkeypatch.setattr(ai_factory, "create_ai_reviewer", lambda _settings: MockReviewer())
+    target = FIXTURES / "safe_sample.py"
+    status = cli.main(["scan", str(target), "--ai-review", "--format", "json"])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+
+    assert status == 0
+    assert "sent to Hugging Face" in captured.err
+    assert reviewed["source_code"] == target.read_text(encoding="utf-8")
+    assert report["scan"]["ai_review"]["provider"] == "Hugging Face"
+    assert report["scan"]["ai_review"]["disclosure"] == (
+        "One source file was sent to Hugging Face after explicit --ai-review opt-in"
+    )
 
 
 def test_ai_review_refuses_directory_without_loading_provider_config(monkeypatch, capsys, tmp_path):
