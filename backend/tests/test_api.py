@@ -102,3 +102,14 @@ def test_unhandled_errors_do_not_expose_exception_details() -> None:
     assert response.json()["error"]["code"] == "internal_error"
     assert response.json()["error"]["message"] == "Internal server error"
     assert "do-not-leak" not in response.text
+
+
+def test_demo_summary_counts_match_findings() -> None:
+    response = client.get("/api/v1/reviews/demo")
+    assert response.status_code == 200
+    payload = response.json()
+    for severity in ("critical", "high", "medium", "low"):
+        assert payload["summary"][severity] == sum(
+            finding["severity"] == severity for finding in payload["findings"]
+        )
+    assert payload["summary"]["total_findings"] == len(payload["findings"])
