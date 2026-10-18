@@ -113,3 +113,17 @@ def test_demo_summary_counts_match_findings() -> None:
             finding["severity"] == severity for finding in payload["findings"]
         )
     assert payload["summary"]["total_findings"] == len(payload["findings"])
+
+
+def test_backend_groq_secret_is_not_in_api_responses() -> None:
+    secret = "gsk_test_only_do_not_use"
+    configured_app = create_app(
+        Settings(_env_file=None, environment="test", groq_api_key=secret)
+    )
+    test_client = TestClient(configured_app)
+
+    responses = [test_client.get("/health"), test_client.get("/api/v1/reviews/demo")]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(secret not in response.text for response in responses)
+    assert all("groq_api_key" not in response.text for response in responses)
