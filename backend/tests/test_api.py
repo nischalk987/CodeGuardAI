@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
+from app.infrastructure.persistence import database
 from app.main import app, create_app
 
 client = TestClient(app)
@@ -20,12 +22,6 @@ def test_demo_review_has_expected_shape() -> None:
     assert payload["summary"]["total_findings"] == len(payload["findings"]) == 5
     assert payload["findings"][0]["severity"] == "critical"
     assert payload["findings"][0]["source"] == "static"
-
-
-def test_review_list_returns_sample_review() -> None:
-    response = client.get("/api/v1/reviews")
-    assert response.status_code == 200
-    assert len(response.json()) == 1
 
 
 def test_demo_findings_have_valid_line_and_confidence_ranges() -> None:
@@ -127,3 +123,29 @@ def test_backend_groq_secret_is_not_in_api_responses() -> None:
     assert all(response.status_code == 200 for response in responses)
     assert all(secret not in response.text for response in responses)
     assert all("groq_api_key" not in response.text for response in responses)
+
+
+def test_database_errors_use_safe_response_and_logs(monkeypatch, caplog) -> None:
+    secret_marker = "DATABASE_URL=private-connection-value"
+    monkeypatch.setattr(
+        database,
+        "get_engine",
+        lambda: (_ for _ in ()).throw(SQLAlchemyError(secret_marker)),
+    )
+    test_app = create_app(Settings(_env_file=None, environment="test"))
+    response = TestClient(test_app, raise_server_exceptions=False).get("/api/v1/reviews")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "database_unavailable"
+    assert secret_marker not in response.text
+    assert secret_marker not in caplog.text
+
+
+def test_review_api_contracts_are_documented_in_openapi() -> None:
+    paths = create_app(Settings(_env_file=None, environment="test")).openapi()["paths"]
+
+    assert "/api/v1/reviews" in paths
+    assert "post" in paths["/api/v1/reviews"]
+    assert "get" in paths["/api/v1/reviews"]
+    assert "get" in paths["/api/v1/reviews/{review_id}"]
+    assert "get" in paths["/api/v1/reviews/{review_id}/findings"]

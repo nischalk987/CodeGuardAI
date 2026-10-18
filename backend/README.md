@@ -5,6 +5,7 @@ FastAPI starter API for CodeGuard AI.
 ## Requirements
 - Python 3.11 or newer
 - pip
+- PostgreSQL (Neon is supported) for persisted review history
 
 ## Run locally
 From this folder:
@@ -15,7 +16,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 # macOS/Linux:
 # source .venv/bin/activate
-# Optional: copy the backend-only settings template (it contains no provider credentials):
+# Copy .env.example to .env and set DATABASE_URL privately for persistence.
 # Windows PowerShell: Copy-Item .env.example .env
 # macOS/Linux: cp .env.example .env
 python -m pip install -e ".[dev]"
@@ -27,7 +28,14 @@ API docs: http://127.0.0.1:8000/docs
 ## Endpoints
 - `GET /health` — health check.
 - `GET /api/v1/reviews/demo` — one sample review.
-- `GET /api/v1/reviews` — list sample review(s).
+- `POST /api/v1/reviews` — scan and persist one bounded source snippet.
+- `GET /api/v1/reviews/{review_id}` — retrieve a persisted review.
+- `GET /api/v1/reviews?limit=20&offset=0` — paginated review history.
+- `GET /api/v1/reviews/{review_id}/findings` — filter findings by severity, category, and status.
+
+The demo endpoint and its response shape are unchanged. Persisted review creation runs only the
+local deterministic analyzer. Source is not executed, uploaded to an AI provider, or stored as a
+file. Finding evidence is redacted before persistence.
 
 ## Tests
 Run `pytest` and `ruff check app tests` after installing the dev extras.
@@ -107,6 +115,7 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `LOG_LEVEL` | `INFO` | Standard logging level |
 | `FRONTEND_ORIGIN` | none | One allowed frontend origin; kept for compatibility |
 | `CORS_ORIGINS` | local Vite origins in development | JSON array of allowed origins |
+| `DATABASE_URL` | none | Backend-only PostgreSQL connection URL |
 | `GROQ_API_KEY` | none | Optional backend-only Groq credential |
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model supporting JSON Schema structured output |
 | `GROQ_TIMEOUT_SECONDS` | `20` | Per-request SDK timeout, from 0 (exclusive) to 120 seconds |
@@ -114,6 +123,30 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `AI_REVIEW_MAX_INPUT_BYTES` | `40000` | Maximum UTF-8 bytes sent for a single source file |
 
 For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. The Groq key is a Pydantic `SecretStr`, is never logged, and is not included in responses. Keep real local `.env` files out of version control.
+
+### Database setup and migrations
+
+Set `DATABASE_URL` in the private `backend/.env` file. Use the database provider's TLS-enabled
+PostgreSQL URL. Never place credentials in source, command-line arguments, frontend settings, or
+committed files. Plain `postgresql://` URLs are adapted to SQLAlchemy's `psycopg` driver. API
+connections and statements use bounded timeouts.
+
+Before migrating a non-disposable database, verify the selected database and schema with a
+read-only connection check. From `backend/`, apply the additive migration and confirm the current
+revision:
+
+```bash
+alembic upgrade head
+alembic current
+```
+
+The migration creates only the `reviews`, `findings`, and `alembic_version` tables and indexes.
+It does not rewrite or delete existing records. Destructive downgrades are disabled; make future
+schema changes with forward migrations. Do not point integration tests at production.
+
+PostgreSQL integration tests use `CODEGUARD_TEST_DATABASE_URL`, which must point to a disposable
+test database. Each test creates a random schema, applies the migrations there, and removes only
+that schema. Regular endpoint tests run the same migrations against a fresh isolated SQLite DB.
 
 ## Review domain
 
@@ -135,8 +168,9 @@ hypotheses and static findings default to confirmed evidence; callers can set ce
 when the evidence warrants it. Finding confidence is an integer percentage from 0 through 100,
 and line ranges are one-based and inclusive.
 
-The domain entities are not currently used to alter or persist the illustrative `/reviews` sample.
-The endpoint remains a static demo and is not evidence of an actual repository scan.
+The `/reviews/demo` route remains illustrative and does not scan a repository. Persisted review
+routes scan bounded snippets with local deterministic checks; they do not call Groq or claim AI
+analysis.
 
 ## Advisory AI reviewer
 
@@ -162,6 +196,7 @@ It displays a Groq upload disclosure before the request, tags results with AI pr
 does not change the static sample-review endpoints or demo dashboard.
 
 ## Current status
-The sample API endpoints return static sample data. The backend includes a local CLI with built-in
-deterministic checks, an optional Semgrep analyzer, and an explicit single-file Groq review option.
-It does not persist reviews, authenticate users, or connect to GitHub yet.
+The sample API endpoints remain available. Persisted review endpoints use PostgreSQL when
+`DATABASE_URL` and the additive Alembic migration are configured. The backend also includes a local
+CLI, optional Semgrep analyzer, and explicit single-file Groq review option. Authentication and
+GitHub integration remain future work.

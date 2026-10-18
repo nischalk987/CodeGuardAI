@@ -68,6 +68,25 @@ def test_blank_groq_key_is_treated_as_unconfigured(monkeypatch: pytest.MonkeyPat
     assert Settings(_env_file=None).groq_api_key is None
 
 
+def test_database_url_is_secret_and_validated() -> None:
+    value = "postgresql://review_user:private_password@db.example/neondb?sslmode=require"
+    settings = Settings(_env_file=None, database_url=value)
+
+    assert settings.database_url is not None
+    assert settings.database_url.get_secret_value() == value
+    assert "private_password" not in repr(settings)
+    assert "private_password" not in settings.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "https://db.example/neondb", "postgresql://db.example", "postgresql://db.example/"],
+)
+def test_invalid_database_urls_are_rejected(value: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, database_url=value)
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
