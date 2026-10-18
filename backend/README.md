@@ -46,5 +46,28 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 
 For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. No provider credentials are loaded by this application foundation.
 
+## Review domain
+
+`app.domain` contains framework-independent `Review` and `Finding` entities. The package uses
+standard-library dataclasses and enums and does not import FastAPI, a database layer, or an AI
+provider. API request/response schemas remain in `app.schemas`; the sample-review endpoints keep
+their existing response shape.
+
+Reviews are immutable snapshots. Lifecycle methods return new snapshots and permit only
+`queued → running → completed`, with `failed` allowed from `queued` or `running`. Failed and
+completed reviews are terminal; findings cannot be replaced once a review is terminal. To correct
+a completed result, retain it as history and create a new review rather than rewriting it.
+
+Finding IDs are deterministic from the rule ID, provenance, repository-relative path, and line
+range. Repeated construction of the same finding identity therefore produces the same ID; message
+wording and confidence changes do not change that identity. Findings preserve provenance
+(`static` or `ai`) separately from certainty (`confirmed` or `hypothesis`). AI findings default to
+hypotheses and static findings default to confirmed evidence; callers can set certainty explicitly
+when the evidence warrants it. Finding confidence is an integer percentage from 0 through 100,
+and line ranges are one-based and inclusive.
+
+The domain entities are not currently used to alter or persist the illustrative `/reviews` sample.
+The endpoint remains a static demo and is not evidence of an actual repository scan.
+
 ## Current status
 The API returns static sample data. It does not scan repositories, call Groq, persist reviews, authenticate users, or connect to GitHub yet.
