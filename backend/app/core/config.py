@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Validated settings for the API process.
 
     Environment variables take precedence over the optional local ``.env`` file.
-    Provider credentials intentionally do not belong to this foundation config.
+    Provider credentials are optional and remain backend-only.
     """
 
     model_config = SettingsConfigDict(
@@ -30,6 +30,35 @@ class Settings(BaseSettings):
     )
     frontend_origin: str | None = Field(default=None, validation_alias="FRONTEND_ORIGIN")
     cors_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ORIGINS")
+    groq_api_key: SecretStr | None = Field(
+        default=None, validation_alias="GROQ_API_KEY", repr=False
+    )
+    groq_model: str = Field(
+        default="openai/gpt-oss-20b", validation_alias="GROQ_MODEL", min_length=1, max_length=128
+    )
+    groq_timeout_seconds: float = Field(
+        default=20.0, validation_alias="GROQ_TIMEOUT_SECONDS", gt=0, le=120
+    )
+    groq_max_retries: int = Field(default=2, validation_alias="GROQ_MAX_RETRIES", ge=0, le=3)
+    ai_review_max_input_bytes: int = Field(
+        default=40_000, validation_alias="AI_REVIEW_MAX_INPUT_BYTES", ge=1, le=200_000
+    )
+
+    @field_validator("groq_api_key", mode="before")
+    @classmethod
+    def normalize_groq_api_key(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("groq_model")
+    @classmethod
+    def normalize_groq_model(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("GROQ_MODEL must not be blank")
+        return normalized
 
     @field_validator("frontend_origin")
     @classmethod

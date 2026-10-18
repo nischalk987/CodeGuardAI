@@ -43,8 +43,13 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `LOG_LEVEL` | `INFO` | Standard logging level |
 | `FRONTEND_ORIGIN` | none | One allowed frontend origin; kept for compatibility |
 | `CORS_ORIGINS` | local Vite origins in development | JSON array of allowed origins |
+| `GROQ_API_KEY` | none | Optional backend-only Groq credential |
+| `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model supporting JSON Schema structured output |
+| `GROQ_TIMEOUT_SECONDS` | `20` | Per-request SDK timeout, from 0 (exclusive) to 120 seconds |
+| `GROQ_MAX_RETRIES` | `2` | Bounded retries for timeouts, connection errors, and transient 5xx errors (0–3) |
+| `AI_REVIEW_MAX_INPUT_BYTES` | `40000` | Maximum UTF-8 bytes sent for a single source file |
 
-For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. No provider credentials are loaded by this application foundation.
+For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. The Groq key is a Pydantic `SecretStr`, is never logged, and is not included in responses. Keep real local `.env` files out of version control.
 
 ## Review domain
 
@@ -69,5 +74,29 @@ and line ranges are one-based and inclusive.
 The domain entities are not currently used to alter or persist the illustrative `/reviews` sample.
 The endpoint remains a static demo and is not evidence of an actual repository scan.
 
+## Advisory AI reviewer
+
+`app.ai.AIReviewer` is a provider-independent async interface. `app.infrastructure.ai.GroqAIReviewer`
+implements it using the Groq SDK and returns validated `app.domain.Finding` entities. It accepts one
+repository-relative source file per call. The adapter enforces the configured UTF-8 input limit,
+requests strict JSON Schema output, validates that output with Pydantic, checks line ranges and
+source evidence, and rejects references to another file. The versioned prompt treats code and
+comments as untrusted data. Findings are always marked as AI hypotheses; suggested fixes are
+descriptive text and are never executed or applied.
+
+To enable the adapter locally, set `GROQ_API_KEY` in a private backend `.env` file or in the
+backend process environment. The key is optional for running the existing demo API. Model IDs are
+configurable because supported models can change. The adapter requires a model with Groq JSON
+Schema structured output support. Free-tier request and token quotas depend on the account and
+selected model, can change, and may cause rate-limit or quota errors; check [Groq's current rate
+limits](https://console.groq.com/docs/rate-limits). Rate limits fail safely without an automatic
+retry, while timeouts, network failures, and transient server errors use the configured bounded
+retry count. Malformed model output is rejected without repair attempts.
+
+This adapter is a backend application component; it does not change or replace the static sample
+review endpoints, and this issue does not wire it into the demo dashboard.
+
 ## Current status
-The API returns static sample data. It does not scan repositories, call Groq, persist reviews, authenticate users, or connect to GitHub yet.
+The sample API endpoints return static sample data. The backend includes an optional, programmatic
+Groq AI reviewer adapter, but it does not persist reviews, authenticate users, or connect to
+GitHub yet.

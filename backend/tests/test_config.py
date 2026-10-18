@@ -39,3 +39,47 @@ def test_development_uses_local_frontend_defaults() -> None:
 def test_invalid_cors_origins_are_rejected() -> None:
     with pytest.raises(ValidationError, match="origins without paths"):
         Settings(_env_file=None, cors_origins=["https://dashboard.example/app"])
+
+
+def test_groq_settings_load_from_environment_without_exposing_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_key = "gsk_test_only_do_not_use"
+    monkeypatch.setenv("GROQ_API_KEY", test_key)
+    monkeypatch.setenv("GROQ_MODEL", "test/model")
+    monkeypatch.setenv("GROQ_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("GROQ_MAX_RETRIES", "1")
+    monkeypatch.setenv("AI_REVIEW_MAX_INPUT_BYTES", "8192")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.groq_api_key is not None
+    assert settings.groq_api_key.get_secret_value() == test_key
+    assert settings.groq_model == "test/model"
+    assert settings.groq_timeout_seconds == 7.5
+    assert settings.groq_max_retries == 1
+    assert settings.ai_review_max_input_bytes == 8192
+    assert test_key not in repr(settings)
+    assert test_key not in settings.model_dump_json()
+
+
+def test_blank_groq_key_is_treated_as_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "   ")
+    assert Settings(_env_file=None).groq_api_key is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"groq_model": " "},
+        {"groq_timeout_seconds": 0},
+        {"groq_timeout_seconds": 121},
+        {"groq_max_retries": -1},
+        {"groq_max_retries": 4},
+        {"ai_review_max_input_bytes": 0},
+        {"ai_review_max_input_bytes": 200_001},
+    ],
+)
+def test_invalid_ai_review_settings_are_rejected(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **overrides)
