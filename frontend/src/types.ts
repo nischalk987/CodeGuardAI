@@ -1,5 +1,6 @@
 export type Severity = "critical" | "high" | "medium" | "low";
 export type FindingSource = "static" | "ai";
+export type FindingDecision = "open" | "accepted" | "ignored";
 
 export interface Finding {
   id: string;

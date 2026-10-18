@@ -37,7 +37,7 @@ The target workflow:
 
 | Feature | What makes it useful | Status |
 |---|---|---|
-| Review dashboard | Severity overview, recent reviews, and a guided first-run experience | Planned |
+| Review dashboard | Severity summary, searchable/filterable sample findings, and finding triage | Implemented (demo data only) |
 | Developer CLI | Scan a local directory, print text/JSON results, and fail on a configurable severity threshold for scripts/CI | Planned |
 | Inline findings | Navigate from a finding to its file and line context | Planned |
 | Static + AI analysis | Pair repeatable rules with contextual explanation | Planned |
@@ -137,6 +137,12 @@ npm run dev
 ```
 
 Open the Vite URL shown in the terminal, usually [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI attempts to load the backend's sample review and falls back to local sample data when the API is unavailable.
+
+Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. Its “Preview demo” control only explains this limitation; it does not run a scan.
+
+### Dashboard preview
+
+<!-- Add a screenshot of the responsive dashboard here. Keep the image labelled as sample data. -->
 
 **3. Run backend tests** in the backend virtual environment:
 

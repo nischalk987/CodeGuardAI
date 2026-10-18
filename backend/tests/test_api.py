@@ -33,3 +33,14 @@ def test_demo_findings_have_valid_line_and_confidence_ranges() -> None:
     for finding in response.json()["findings"]:
         assert finding["line"] >= 1
         assert 0 <= finding["confidence"] <= 100
+
+
+def test_demo_summary_counts_match_findings() -> None:
+    response = client.get("/api/v1/reviews/demo")
+    assert response.status_code == 200
+    payload = response.json()
+    for severity in ("critical", "high", "medium", "low"):
+        assert payload["summary"][severity] == sum(
+            finding["severity"] == severity for finding in payload["findings"]
+        )
+    assert payload["summary"]["total_findings"] == len(payload["findings"])
