@@ -37,6 +37,7 @@ def migrated_database():
 @pytest.fixture
 def review_client(
     migrated_database: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
     test_app = create_app(Settings(_env_file=None, environment="test"))
 
@@ -45,12 +46,31 @@ def review_client(
             yield session
 
     test_app.dependency_overrides[get_session] = override_session
+
+    monkeypatch.setattr("app.api.v1.reviews.enqueue_review_task", lambda *_args: None)
+    test_app.state.review_session_factory = migrated_database
     with TestClient(test_app) as client:
         yield client
 
 
 @pytest.fixture
-def postgres_review_client() -> Generator[TestClient, None, None]:
+def run_queued_review():
+    """Execute a queued test request only after its HTTP session has been returned."""
+    def run(factory, review_id: str, request_data: dict[str, str]) -> None:
+        from app.application.reviews import ReviewService
+        from app.infrastructure.persistence.repository import SqlAlchemyReviewRepository
+        from app.schemas import ReviewCreateRequest
+
+        with factory() as session:
+            ReviewService(SqlAlchemyReviewRepository(session)).execute_queued(
+                review_id, ReviewCreateRequest.model_validate(request_data)
+            )
+
+    return run
+
+
+@pytest.fixture
+def postgres_review_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
     """Run API integration checks in a unique schema on a disposable PostgreSQL database."""
     database_url = os.getenv("CODEGUARD_TEST_DATABASE_URL")
     if not database_url:
@@ -103,6 +123,9 @@ def postgres_review_client() -> Generator[TestClient, None, None]:
             yield session
 
     test_app.dependency_overrides[get_session] = override_session
+
+    monkeypatch.setattr("app.api.v1.reviews.enqueue_review_task", lambda *_args: None)
+    test_app.state.review_session_factory = factory
     try:
         with TestClient(test_app) as client:
             yield client

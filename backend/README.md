@@ -28,14 +28,38 @@ API docs: http://127.0.0.1:8000/docs
 ## Endpoints
 - `GET /health` — health check.
 - `GET /api/v1/reviews/demo` — one sample review.
-- `POST /api/v1/reviews` — scan and persist one bounded source snippet.
+- `POST /api/v1/reviews` — queue a bounded source snippet and return HTTP 202 with its review ID.
 - `GET /api/v1/reviews/{review_id}` — retrieve a persisted review.
 - `GET /api/v1/reviews?limit=20&offset=0` — paginated review history.
 - `GET /api/v1/reviews/{review_id}/findings` — filter findings by severity, category, and status.
 
 The demo endpoint and its response shape are unchanged. Persisted review creation runs only the
-local deterministic analyzer. Source is not executed, uploaded to an AI provider, or stored as a
-file. Finding evidence is redacted before persistence.
+local deterministic analyzer. Source is not executed, uploaded to an AI provider, or stored in the
+database. The bounded job payload is sent to the configured Redis broker for the worker. Finding
+evidence is redacted before persistence. Poll `GET /api/v1/reviews/{review_id}` for queued, running,
+completed, or failed status.
+
+Review requests may include an `Idempotency-Key` header (1–255 visible ASCII characters). Reusing
+the same key with the same normalized JSON request returns the original review without enqueueing a
+second job. Reusing a key with different content returns HTTP 409. Keys are unique across this
+application database; clients should generate a new random key for each intentional review.
+
+Run the API and worker as separate processes. Start Redis and set `REDIS_URL` privately in
+`backend/.env` (default: `redis://localhost:6379/0`). From `backend/`:
+
+```bash
+# Terminal 1: API
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Terminal 2: Celery worker
+celery -A app.jobs.queue:celery_app worker --loglevel=INFO --queues=reviews --pool=solo
+```
+
+Transient provider and database errors retry at most three times with exponential backoff capped at
+30 seconds. Input/validation failures are not retried. Failed reviews expose only a safe generic
+reason and a correlation ID. Task representations redact the review payload; logs include review
+and correlation IDs but not source code or provider credentials. Redis carries the bounded source
+payload while a job is pending, so use an authenticated, private Redis service for deployments.
 
 ## Tests
 Run `pytest` and `ruff check app tests` after installing the dev extras.
@@ -116,6 +140,7 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `FRONTEND_ORIGIN` | none | One allowed frontend origin; kept for compatibility |
 | `CORS_ORIGINS` | local Vite origins in development | JSON array of allowed origins |
 | `DATABASE_URL` | none | Backend-only PostgreSQL connection URL |
+| `REDIS_URL` | `redis://localhost:6379/0` | Celery broker URL for background reviews |
 | `GROQ_API_KEY` | none | Optional backend-only Groq credential |
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model supporting JSON Schema structured output |
 | `GROQ_TIMEOUT_SECONDS` | `20` | Per-request SDK timeout, from 0 (exclusive) to 120 seconds |
@@ -140,9 +165,10 @@ alembic upgrade head
 alembic current
 ```
 
-The migration creates only the `reviews`, `findings`, and `alembic_version` tables and indexes.
-It does not rewrite or delete existing records. Destructive downgrades are disabled; make future
-schema changes with forward migrations. Do not point integration tests at production.
+The migrations create the `reviews`, `findings`, and `alembic_version` tables and add nullable
+correlation, failure, and idempotency columns plus an idempotency index. They do not rewrite or
+delete existing records. Destructive downgrades are disabled; make future schema changes with
+forward migrations. Do not point integration tests at production.
 
 PostgreSQL integration tests use `CODEGUARD_TEST_DATABASE_URL`, which must point to a disposable
 test database. Each test creates a random schema, applies the migrations there, and removes only
@@ -197,6 +223,7 @@ does not change the static sample-review endpoints or demo dashboard.
 
 ## Current status
 The sample API endpoints remain available. Persisted review endpoints use PostgreSQL when
-`DATABASE_URL` and the additive Alembic migration are configured. The backend also includes a local
-CLI, optional Semgrep analyzer, and explicit single-file Groq review option. Authentication and
-GitHub integration remain future work.
+`DATABASE_URL` and the additive Alembic migrations are configured. Review creation returns a
+queued job ID and a separate Celery worker updates its persisted lifecycle; Redis is the job broker.
+The backend also includes a local CLI, optional Semgrep analyzer, and explicit single-file Groq
+review option. Authentication and GitHub integration remain future work.

@@ -178,6 +178,8 @@ class Review:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone(timedelta(0))))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone(timedelta(0))))
     completed_at: datetime | None = None
+    correlation_id: str | None = None
+    failure_reason: str | None = None
     summary: ReviewSummary = field(default_factory=ReviewSummary)
     findings: tuple[Finding, ...] = ()
 
@@ -203,6 +205,14 @@ class Review:
                 raise ValueError("completed_at must be between created_at and updated_at")
         elif self.status is ReviewStatus.COMPLETED:
             raise ValueError("completed reviews require completed_at")
+        if self.correlation_id is not None:
+            object.__setattr__(self, "correlation_id", _required_text(self.correlation_id, "correlation_id"))
+        if self.failure_reason is not None:
+            object.__setattr__(self, "failure_reason", _required_text(self.failure_reason, "failure_reason"))
+        if self.status is ReviewStatus.FAILED and not self.failure_reason:
+            raise ValueError("failed reviews require a safe failure_reason")
+        if self.status is not ReviewStatus.FAILED and self.failure_reason is not None:
+            raise ValueError("failure_reason is only valid for failed reviews")
 
         findings = tuple(self.findings)
         if not all(isinstance(item, Finding) for item in findings):
@@ -220,8 +230,17 @@ class Review:
     def complete(self, *, at: datetime | None = None, summary: str | None = None) -> Review:
         return self.transition_to(ReviewStatus.COMPLETED, at=at, summary=summary)
 
-    def fail(self, *, at: datetime | None = None) -> Review:
-        return self.transition_to(ReviewStatus.FAILED, at=at)
+    def fail(
+        self,
+        *,
+        at: datetime | None = None,
+        reason: str = "The review could not be completed. Please try again.",
+    ) -> Review:
+        return self.transition_to(ReviewStatus.FAILED, at=at, failure_reason=reason)
+
+    def requeue(self, *, at: datetime | None = None) -> Review:
+        """Return a running review to the queue after a retryable execution failure."""
+        return self.transition_to(ReviewStatus.QUEUED, at=at)
 
     def transition_to(
         self,
@@ -229,11 +248,16 @@ class Review:
         *,
         at: datetime | None = None,
         summary: str | None = None,
+        failure_reason: str | None = None,
     ) -> Review:
         target = _enum_value(ReviewStatus, status, "status")
         allowed = {
             ReviewStatus.QUEUED: {ReviewStatus.RUNNING, ReviewStatus.FAILED},
-            ReviewStatus.RUNNING: {ReviewStatus.COMPLETED, ReviewStatus.FAILED},
+            ReviewStatus.RUNNING: {
+                ReviewStatus.QUEUED,
+                ReviewStatus.COMPLETED,
+                ReviewStatus.FAILED,
+            },
             ReviewStatus.COMPLETED: set(),
             ReviewStatus.FAILED: set(),
         }
@@ -247,6 +271,11 @@ class Review:
         changes: dict[str, object] = {"status": target, "updated_at": transition_time}
         if target is ReviewStatus.COMPLETED:
             changes["completed_at"] = transition_time
+        if target is ReviewStatus.FAILED:
+            changes["failure_reason"] = _required_text(
+                failure_reason or "The review could not be completed. Please try again.",
+                "failure_reason",
+            )
         if summary is not None:
             changes["summary"] = ReviewSummary.from_findings(self.findings, summary)
         return replace(self, **changes)

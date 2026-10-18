@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.domain import Finding, Review, ReviewSourceType, ReviewStatus, ReviewSummary, Severity
@@ -17,21 +17,75 @@ class SqlAlchemyReviewRepository:
         self._session = session
 
     def save(self, review: Review) -> None:
+        row = self._session.get(ReviewRow, review.id)
+        if row is None:
+            row = ReviewRow(id=review.id, source_type=review.source_type.value)
+            self._session.add(row)
+        else:
+            # Replace only this review's findings after validating the domain transition.
+            self._session.execute(delete(FindingRow).where(FindingRow.review_id == review.id))
+        row.source_type = review.source_type.value
+        row.repository = review.repository or "local"
+        row.branch = review.ref or "local"
+        row.status = review.status.value
+        row.risk_score = _risk_score(review)
+        row.summary_text = review.summary.text
+        row.created_at = review.created_at
+        row.updated_at = review.updated_at
+        row.completed_at = review.completed_at
+        row.correlation_id = review.correlation_id
+        row.failure_reason = review.failure_reason
+        row.findings = [_finding_row(review.id, finding) for finding in review.findings]
+        self._session.commit()
+
+    def create_queued(
+        self, review: Review, *, idempotency_key: str | None, request_hash: str
+    ) -> None:
         row = ReviewRow(
             id=review.id,
             source_type=review.source_type.value,
             repository=review.repository or "local",
             branch=review.ref or "local",
             status=review.status.value,
-            risk_score=_risk_score(review),
-            summary_text=review.summary.text,
+            risk_score=0,
+            summary_text="",
             created_at=review.created_at,
             updated_at=review.updated_at,
-            completed_at=review.completed_at,
-            findings=[_finding_row(review.id, finding) for finding in review.findings],
+            correlation_id=review.correlation_id,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
         )
         self._session.add(row)
         self._session.commit()
+
+    def claim_queued(self, review_id: str) -> Review | None:
+        """Atomically transition a queued row to running; duplicate deliveries become no-ops."""
+        row = self._session.scalar(
+            select(ReviewRow)
+            .where(ReviewRow.id == review_id)
+            .options(selectinload(ReviewRow.findings))
+        )
+        if row is None or ReviewStatus(row.status) is not ReviewStatus.QUEUED:
+            return None
+        queued = _to_domain(row)
+        running = queued.start()
+        changed = self._session.execute(
+            update(ReviewRow)
+            .where(ReviewRow.id == review_id, ReviewRow.status == ReviewStatus.QUEUED.value)
+            .values(status=ReviewStatus.RUNNING.value, updated_at=running.updated_at)
+        ).rowcount
+        self._session.commit()
+        return running if changed == 1 else None
+
+    def find_idempotent(self, key: str) -> tuple[str, Review] | None:
+        row = self._session.scalar(
+            select(ReviewRow)
+            .where(ReviewRow.idempotency_key == key)
+            .options(selectinload(ReviewRow.findings))
+        )
+        if row is None:
+            return None
+        return row.request_hash or "", _to_domain(row)
 
     def get(self, review_id: str) -> Review | None:
         row = self._session.scalar(
@@ -134,6 +188,8 @@ def _to_domain(row: ReviewRow) -> Review:
         created_at=_aware_utc(row.created_at),
         updated_at=_aware_utc(row.updated_at),
         completed_at=_aware_utc(row.completed_at) if row.completed_at else None,
+        correlation_id=row.correlation_id,
+        failure_reason=row.failure_reason,
         findings=findings,
         summary=ReviewSummary.from_findings(findings, row.summary_text),
     )

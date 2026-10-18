@@ -78,6 +78,8 @@ def test_invalid_review_transitions_are_rejected(
         kwargs["created_at"] = completed_at - timedelta(seconds=1)
         kwargs["completed_at"] = completed_at
         kwargs["updated_at"] = completed_at
+    if initial is ReviewStatus.FAILED:
+        kwargs["failure_reason"] = "The review could not be completed."
     review = make_review(**kwargs)
 
     with pytest.raises(InvalidReviewTransition):
@@ -89,6 +91,15 @@ def test_queued_review_can_fail_without_running() -> None:
     assert failed.status is ReviewStatus.FAILED
     with pytest.raises(InvalidReviewTransition):
         failed.with_findings([make_finding()])
+
+
+def test_running_review_can_be_requeued_for_a_bounded_retry() -> None:
+    running = make_review().start()
+    queued_again = running.requeue()
+
+    assert running.status is ReviewStatus.RUNNING
+    assert queued_again.status is ReviewStatus.QUEUED
+    assert queued_again.updated_at >= running.updated_at
 
 
 def test_completed_review_and_findings_are_immutable() -> None:

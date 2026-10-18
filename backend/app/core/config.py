@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = Field(
         default=None, validation_alias="DATABASE_URL", repr=False
     )
+    redis_url: SecretStr = Field(
+        default=SecretStr("redis://localhost:6379/0"), validation_alias="REDIS_URL", repr=False
+    )
     groq_model: str = Field(
         default="openai/gpt-oss-20b", validation_alias="GROQ_MODEL", min_length=1, max_length=128
     )
@@ -74,6 +77,21 @@ class Settings(BaseSettings):
             or not database
         ):
             raise ValueError("DATABASE_URL must point to a PostgreSQL database")
+        return value.strip()
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def validate_redis_url(cls, value: object) -> object:
+        if isinstance(value, SecretStr):
+            value = value.get_secret_value()
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("REDIS_URL must be a valid Redis URL")
+        try:
+            parsed = urlsplit(value.strip())
+        except ValueError:
+            raise ValueError("REDIS_URL must be a valid Redis URL") from None
+        if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
+            raise ValueError("REDIS_URL must use redis:// or rediss:// and include a host")
         return value.strip()
 
     @field_validator("groq_model")
