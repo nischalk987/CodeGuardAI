@@ -55,6 +55,8 @@ class Review(BaseModel):
     risk_score: int = Field(ge=0, le=100)
     summary: ReviewSummary
     findings: list[Finding]
+    correlation_id: str | None = None
+    failure_reason: str | None = None
 
 
 class ReviewCreateRequest(BaseModel):

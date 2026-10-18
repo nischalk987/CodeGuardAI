@@ -78,6 +78,21 @@ def test_database_url_is_secret_and_validated() -> None:
     assert "private_password" not in settings.model_dump_json()
 
 
+def test_redis_url_is_validated_and_secret() -> None:
+    value = "rediss://review_user:private_password@redis.example:6380/0"
+    settings = Settings(_env_file=None, redis_url=value)
+
+    assert settings.redis_url.get_secret_value() == value
+    assert "private_password" not in repr(settings)
+    assert "private_password" not in settings.model_dump_json()
+
+
+@pytest.mark.parametrize("value", ["", "http://redis.example", "redis:///0"])
+def test_invalid_redis_urls_are_rejected(value: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, redis_url=value)
+
+
 @pytest.mark.parametrize(
     "value",
     ["", "https://db.example/neondb", "postgresql://db.example", "postgresql://db.example/"],

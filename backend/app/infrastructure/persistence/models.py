@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -23,6 +23,11 @@ class ReviewRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    correlation_id: Mapped[str | None] = mapped_column(String(36))
+    failure_reason: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+    __table_args__ = (Index("uq_reviews_idempotency_key", "idempotency_key", unique=True),)
     findings: Mapped[list["FindingRow"]] = relationship(
         back_populates="review", order_by="FindingRow.file_path, FindingRow.line"
     )

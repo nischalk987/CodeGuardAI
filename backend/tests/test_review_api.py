@@ -8,18 +8,22 @@ from app.main import create_app
 def test_create_and_retrieve_review_persists_across_app_instances(
     review_client: TestClient,
     migrated_database,
+    run_queued_review,
 ) -> None:
+    payload = {
+        "source_code": 'password = "not-a-placeholder"\n',
+        "file_path": "src/auth.py",
+        "repository": "example/payments",
+        "branch": "feature/session",
+    }
     created = review_client.post(
         "/api/v1/reviews",
-        json={
-            "source_code": 'password = "not-a-placeholder"\n',
-            "file_path": "src/auth.py",
-            "repository": "example/payments",
-            "branch": "feature/session",
-        },
+        json=payload,
     )
-    assert created.status_code == 201
-    result = created.json()
+    assert created.status_code == 202
+    assert created.json()["status"] == "queued"
+    run_queued_review(migrated_database, created.json()["review_id"], payload)
+    result = review_client.get(f"/api/v1/reviews/{created.json()['review_id']}").json()
     assert result["status"] == "completed"
     assert result["findings"][0]["file_path"] == "src/auth.py"
     assert result["findings"][0]["rule_id"] == "CG.SEC.HARDCODED_CREDENTIAL"
@@ -51,7 +55,7 @@ def test_review_history_paginates_and_unknown_ids_return_404(review_client: Test
         response = review_client.post(
             "/api/v1/reviews", json={"source_code": f"value_{index} = {index}\n"}
         )
-        assert response.status_code == 201
+        assert response.status_code == 202
         ids.append(response.json()["review_id"])
 
     page = review_client.get("/api/v1/reviews", params={"limit": 2, "offset": 1})
@@ -65,16 +69,18 @@ def test_review_history_paginates_and_unknown_ids_return_404(review_client: Test
 
 
 def test_findings_can_be_filtered_by_severity_category_and_status(
-    review_client: TestClient,
+    review_client: TestClient, migrated_database, run_queued_review
 ) -> None:
+    payload = {
+        "source_code": 'password = "long-private-value"\nverify = False\n',
+        "file_path": "src/security.py",
+    }
     created = review_client.post(
         "/api/v1/reviews",
-        json={
-            "source_code": 'password = "long-private-value"\nverify = False\n',
-            "file_path": "src/security.py",
-        },
+        json=payload,
     )
     review_id = created.json()["review_id"]
+    run_queued_review(migrated_database, review_id, payload)
 
     response = review_client.get(
         f"/api/v1/reviews/{review_id}/findings",
@@ -112,12 +118,37 @@ def test_review_creation_is_rate_limited(review_client: TestClient) -> None:
         response = review_client.post(
             "/api/v1/reviews", json={"source_code": f"value = {index}\n"}
         )
-        assert response.status_code == 201
+        assert response.status_code == 202
 
     limited = review_client.post("/api/v1/reviews", json={"source_code": "value = 21\n"})
     assert limited.status_code == 429
     assert limited.json()["error"]["code"] == "http_error"
     clear_rate_limit_state()
+
+
+def test_idempotency_key_reuses_one_job_and_rejects_different_payload(
+    review_client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import reviews as routes
+
+    calls = []
+    monkeypatch.setattr(routes, "enqueue_review_task", lambda *args: calls.append(args))
+    headers = {"Idempotency-Key": "test-review-001"}
+    payload = {"source_code": "safe_value = 1\n", "file_path": "src/sample.py"}
+
+    first = review_client.post("/api/v1/reviews", json=payload, headers=headers)
+    repeated = review_client.post("/api/v1/reviews", json=payload, headers=headers)
+    conflict = review_client.post(
+        "/api/v1/reviews",
+        json={"source_code": "different = 2\n", "file_path": "src/sample.py"},
+        headers=headers,
+    )
+
+    assert first.status_code == repeated.status_code == 202
+    assert first.json()["review_id"] == repeated.json()["review_id"]
+    assert first.json()["status"] == "queued"
+    assert len(calls) == 1
+    assert conflict.status_code == 409
 
 
 def test_history_pagination_limits_are_validated(review_client: TestClient) -> None:

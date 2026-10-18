@@ -23,6 +23,8 @@ from app.schemas import ReviewCreateRequest
 class ReviewRepository(Protocol):
     def save(self, review: Review) -> None: ...
 
+    def claim_queued(self, review_id: str) -> Review | None: ...
+
     def get(self, review_id: str) -> Review | None: ...
 
     def list(self, *, limit: int, offset: int) -> list[Review]: ...
@@ -51,20 +53,31 @@ class ReviewService:
     def __init__(self, repository: ReviewRepository) -> None:
         self._repository = repository
 
-    def create(self, request: ReviewCreateRequest) -> Review:
-        suffix = Path(request.file_path).suffix.lower()
-        if suffix not in {".py", ".js", ".jsx", ".ts", ".tsx"}:
-            raise ValueError("file_path must use a supported source extension")
-
+    def create_queued_record(
+        self, request: ReviewCreateRequest, *, correlation_id: str | None
+    ) -> Review:
+        """Create a queued review snapshot without scanning source code."""
         now = datetime.now(timezone.utc)
-        review = Review(
+        return Review(
             id=f"rev_{uuid4().hex}",
             source_type=ReviewSourceType.SNIPPET,
             repository=request.repository,
             ref=request.branch,
             created_at=now,
             updated_at=now,
-        ).start(at=now)
+            correlation_id=correlation_id,
+        )
+
+    def execute_queued(self, review_id: str, request: ReviewCreateRequest) -> Review:
+        """Run the deterministic analyzer for an existing queued review."""
+        review = self._repository.claim_queued(review_id)
+        if review is None:
+            return self.get(review_id)
+        suffix = Path(request.file_path).suffix.lower()
+        if suffix not in {".py", ".js", ".jsx", ".ts", ".tsx"}:
+            failed = review.fail(reason="The submitted file type cannot be scanned.")
+            self._repository.save(failed)
+            return failed
         try:
             findings = tuple(
                 replace(
@@ -74,8 +87,10 @@ class ReviewService:
                 )
                 for item in BuiltinAnalyzer().analyze_source(request.source_code, request.file_path)
             )
-        except AnalyzerError as exc:
-            raise ValueError("The submitted snippet could not be scanned") from exc
+        except AnalyzerError:
+            failed = review.fail(reason="The submitted snippet could not be scanned.")
+            self._repository.save(failed)
+            return failed
 
         review = review.with_findings(findings).complete(
             summary="Completed a local deterministic scan. No AI provider was called."

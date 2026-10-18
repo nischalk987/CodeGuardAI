@@ -1,19 +1,26 @@
 from collections import defaultdict, deque
+import hashlib
+import json
+import logging
 from threading import Lock
 from time import monotonic
 from typing import Annotated, Literal
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.reviews import ReviewNotFound, ReviewService, risk_score
 from app.domain import Finding, Review as ReviewEntity
 from app.infrastructure.persistence.database import get_session
 from app.infrastructure.persistence.repository import SqlAlchemyReviewRepository
+from app.jobs.worker import execute_review
 from app.schemas import Finding as FindingResponse
 from app.schemas import Review, ReviewCreateRequest, ReviewSummary
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
+logger = logging.getLogger(__name__)
 
 _CREATE_LIMIT = 20
 _CREATE_WINDOW_SECONDS = 60
@@ -95,19 +102,72 @@ def list_reviews(
     return [_to_response(item) for item in service.list(limit=limit, offset=offset)]
 
 
-@router.post("", response_model=Review, status_code=201, summary="Create a bounded code review")
+@router.post("", response_model=Review, status_code=202, summary="Queue a bounded code review")
 def create_review(
     payload: ReviewCreateRequest,
     request: Request,
+    response: Response,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=255)] = None,
     session: Session = Depends(get_session),
 ) -> Review:
-    """Run bounded deterministic checks over source data; never executes or uploads it."""
+    """Queue bounded deterministic checks; source is sent only to the configured Redis broker."""
     _enforce_create_rate(request)
     service = ReviewService(SqlAlchemyReviewRepository(session))
+    repository = SqlAlchemyReviewRepository(session)
+    request_hash = _request_hash(payload)
+    if idempotency_key is not None:
+        _validate_idempotency_key(idempotency_key)
+        previous = repository.find_idempotent(idempotency_key)
+        if previous is not None:
+            previous_hash, previous_review = previous
+            if previous_hash != request_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key was already used for a different review request",
+                )
+            response.status_code = (
+                202
+                if previous_review.status.value in {"queued", "running"}
+                else 200
+            )
+            return _to_response(previous_review)
+
+    correlation_id = str(uuid4())
+    queued_review = service.create_queued_record(payload, correlation_id=correlation_id)
     try:
-        return _to_response(service.create(payload))
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
+        repository.create_queued(
+            queued_review,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+    except IntegrityError:
+        session.rollback()
+        if idempotency_key is None:
+            raise
+        previous = repository.find_idempotent(idempotency_key)
+        if previous is None:
+            raise
+        previous_hash, previous_review = previous
+        if previous_hash != request_hash:
+            raise HTTPException(status_code=409, detail="Idempotency-Key conflicts with an existing request") from None
+        response.status_code = 202 if previous_review.status.value in {"queued", "running"} else 200
+        return _to_response(previous_review)
+
+    try:
+        enqueue_review_task(queued_review.id, payload.model_dump(mode="json"), correlation_id)
+    except Exception as exc:
+        failed = queued_review.fail(reason="The review queue is temporarily unavailable. Please retry.")
+        repository.save(failed)
+        logger.error(
+            "Review queue submission failed",
+            extra={"review_id": queued_review.id, "correlation_id": correlation_id, "error_type": type(exc).__name__},
+        )
+        raise HTTPException(status_code=503, detail="Review queue is temporarily unavailable") from None
+    logger.info(
+        "Review queued",
+        extra={"review_id": queued_review.id, "correlation_id": correlation_id},
+    )
+    return _to_response(queued_review)
 
 
 @router.get("/{review_id}/findings", response_model=list[FindingResponse])
@@ -184,7 +244,27 @@ def _to_response(review: ReviewEntity) -> Review:
             total_findings=review.summary.total_findings,
         ),
         findings=findings,
+        correlation_id=review.correlation_id,
+        failure_reason=review.failure_reason,
     )
+
+
+def _request_hash(payload: ReviewCreateRequest) -> str:
+    canonical = json.dumps(payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def enqueue_review_task(review_id: str, request_data: dict[str, str], correlation_id: str) -> None:
+    """Dispatch with a redacted task representation so source never appears in task logs."""
+    execute_review.apply_async(
+        args=[review_id, request_data, correlation_id],
+        argsrepr=f"({review_id!r}, '<review payload redacted>', {correlation_id!r})",
+    )
+
+
+def _validate_idempotency_key(value: str) -> None:
+    if not value or len(value) > 255 or any(ord(char) < 33 or ord(char) > 126 for char in value):
+        raise HTTPException(status_code=422, detail="Idempotency-Key must contain 1–255 visible ASCII characters")
 
 
 def _enforce_create_rate(request: Request) -> None:

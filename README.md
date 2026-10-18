@@ -131,7 +131,7 @@ python -m pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API docs are available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). The labelled sample endpoint is `GET /api/v1/reviews/demo`. Configure `DATABASE_URL` privately in `backend/.env`, verify the target database, and run `alembic upgrade head` from `backend/` to enable persistent review routes. Review creation scans a bounded snippet with local deterministic checks; it does not call AI or execute submitted code.
+The API docs are available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). The labelled sample endpoint is `GET /api/v1/reviews/demo`. Configure `DATABASE_URL` and `REDIS_URL` privately in `backend/.env`, verify the database target, and run `alembic upgrade head` from `backend/`. `POST /api/v1/reviews` returns HTTP 202 while a separately run Celery worker scans the snippet with local deterministic checks; it does not call AI or execute submitted code. See [backend setup](backend/README.md#run-locally) for the worker command and idempotency behavior.
 
 **2. Start the frontend** (Node.js 20+):
 
