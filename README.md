@@ -8,7 +8,7 @@
 
 ---
 
-> **Project status: Early build / roadmap stage.** This repository is being built in public. Features below are marked as planned until implemented and tested. The demo experience will distinguish sample data from real analysis.
+> **Project status: Starter scaffold.** The React dashboard and FastAPI sample endpoints are now in the repository. Findings are sample data; live code scanning, Groq integration, persistence, and GitHub PR review are not implemented yet.
 
 ## Why CodeGuard AI?
 
@@ -88,36 +88,63 @@ Exact dependency and model choices will be documented and pinned as implementati
 6. **Design for testability.** Put provider SDKs behind interfaces and test business logic without network credentials.
 7. **Be honest about status.** Screenshots and seeded findings must be labelled as demo data; roadmap items are not advertised as shipped features.
 
-## Repository layout target
+## Repository structure
 
 ```text
 CodeGuardAI/
 ├── frontend/                 # React + TypeScript application
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/           # Thin HTTP routes
-│   │   ├── domain/            # Entities and business invariants
-│   │   ├── application/       # Use cases and provider interfaces
-│   │   ├── infrastructure/    # Database, GitHub, analyzer, AI, queue adapters
-│   │   └── core/              # Configuration, logging, security
-│   ├── tests/
-│   └── alembic/
-├── docs/                      # Architecture, threat model, decisions
+│   │   ├── api/v1/reviews.py  # Sample review endpoints
+│   │   ├── main.py            # FastAPI app and health check
+│   │   └── schemas.py         # Typed API response models
+│   ├── tests/test_api.py      # API tests
+│   └── pyproject.toml
+├── .github/                   # Issue and PR templates
 ├── .env.example
-├── docker-compose.yml
+├── CONTRIBUTING.md
+├── SECURITY.md
 └── README.md
 ```
 
-This is the **target layout**, not a claim that every directory exists today.
+This shows the **current starter structure**; domain, application, infrastructure, database, and worker modules will be added as those issues are implemented.
 
 ## Getting started
 
-The project bootstrap is in progress. Until the runnable application is added, use the GitHub issue backlog to follow implementation work:
+Run the frontend and backend in separate terminals.
 
-- [Open issues and roadmap](https://github.com/nischalk987/CodeGuardAI/issues)
-- [Repository](https://github.com/nischalk987/CodeGuardAI)
+**1. Start the backend** (Python 3.11+):
 
-When setup is available, this section will include a tested fresh-clone workflow and demo command. Do not commit real API keys. A future `.env.example` should contain variable names and placeholders only.
+```bash
+cd backend
+python -m venv .venv
+# Windows PowerShell:
+.venv\\Scripts\\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
+python -m pip install -e ".[dev]"
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The API docs are available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). The sample endpoint is `GET /api/v1/reviews/demo`.
+
+**2. Start the frontend** (Node.js 20+):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI attempts to load the backend's sample review and falls back to local sample data when the API is unavailable.
+
+**3. Run backend tests** in the backend virtual environment:
+
+```bash
+pytest
+```
+
+For development tasks and acceptance criteria, see the [12 open issues](https://github.com/nischalk987/CodeGuardAI/issues). Do not commit real API keys; keep secrets in local environment variables and out of frontend code.
 
 ## Quality bar for the MVP
 
