@@ -146,6 +146,12 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `GROQ_TIMEOUT_SECONDS` | `20` | Per-request SDK timeout, from 0 (exclusive) to 120 seconds |
 | `GROQ_MAX_RETRIES` | `2` | Bounded retries for timeouts, connection errors, and transient 5xx errors (0–3) |
 | `AI_REVIEW_MAX_INPUT_BYTES` | `40000` | Maximum UTF-8 bytes sent for a single source file |
+| `GITHUB_APP_ID` | none | Optional GitHub App ID used by the backend worker |
+| `GITHUB_PRIVATE_KEY_PATH` | none | Path to the private GitHub App PEM file; never commit the file |
+| `GITHUB_WEBHOOK_SECRET` | none | Secret used to verify GitHub webhook signatures |
+| `GITHUB_API_BASE_URL` | `https://api.github.com` | HTTPS API base URL; override for GitHub Enterprise |
+| `GITHUB_MAX_DIFF_BYTES` | `100000` | Maximum aggregate PR patch bytes fetched for a review |
+| `GITHUB_MAX_FILES` | `50` | Maximum changed files fetched per PR |
 
 For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. The Groq key is a Pydantic `SecretStr`, is never logged, and is not included in responses. Keep real local `.env` files out of version control.
 
@@ -226,4 +232,28 @@ The sample API endpoints remain available. Persisted review endpoints use Postgr
 `DATABASE_URL` and the additive Alembic migrations are configured. Review creation returns a
 queued job ID and a separate Celery worker updates its persisted lifecycle; Redis is the job broker.
 The backend also includes a local CLI, optional Semgrep analyzer, and explicit single-file Groq
-review option. Authentication and GitHub integration remain future work.
+review option. GitHub pull-request intake is optional and requires a separately installed GitHub App.
+
+### GitHub pull-request reviews
+
+Issue #8 uses a GitHub App installation model so repository access is granted by an installation
+instead of exposing a user token in the browser. No OAuth token or callback is sent to the frontend.
+The signed webhook's delivery UUID, event name, action, installation ID, repository, pull-request
+number, and head commit are validated before a review is queued. HMAC-SHA256 signatures are
+verified against the raw body with constant-time comparison. Database uniqueness on delivery IDs
+and repository, pull request, and head SHA makes repeated deliveries idempotent. Webhook bodies are
+size-bounded and requests are acknowledged only after review and delivery mappings are committed.
+
+For local setup, create a GitHub App with only **Pull requests: Read-only** and **Contents:
+Read-only** repository permissions, and subscribe to **Pull request** events. Set the App ID,
+private-key path, and webhook secret in a private `backend/.env`; keep the PEM file outside the
+repository. Configure the webhook URL as `http://localhost:8000/api/v1/github/webhook` using a
+local webhook relay, or use the signed fixture tests. Health checks and the existing review routes
+work without GitHub credentials; production credentials are not required by the test suite.
+
+Run the API and Celery worker as described above. Missing permissions, API rate limits, and
+oversized diffs produce safe failed review states without leaking provider responses or tokens.
+The worker fetches PR file patches through the GitHub API, caps file count and total patch bytes,
+and runs only existing deterministic checks on added lines in supported source files. It does not
+post comments, block merges, execute source code, or call an AI provider. Findings use the shared
+advisory domain model and existing review API.

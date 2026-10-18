@@ -117,3 +117,25 @@ def test_invalid_database_urls_are_rejected(value: str) -> None:
 def test_invalid_ai_review_settings_are_rejected(overrides: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **overrides)
+
+
+def test_github_app_settings_are_optional_secret_and_normalized() -> None:
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        github_app_id=" 123 ",
+        github_private_key_path=" ./app.pem ",
+        github_webhook_secret=" local-secret ",
+    )
+    assert settings.github_app_id == "123"
+    assert settings.github_private_key_path == "./app.pem"
+    assert settings.github_webhook_secret is not None
+    assert settings.github_webhook_secret.get_secret_value() == "local-secret"
+    assert "local-secret" not in repr(settings)
+    assert "local-secret" not in settings.model_dump_json()
+
+
+@pytest.mark.parametrize("value", ["http://api.github.com", "https://api.github.com/v3?x=1"])
+def test_invalid_github_api_base_is_rejected(value: str) -> None:
+    with pytest.raises(ValidationError, match="GITHUB_API_BASE_URL"):
+        Settings(_env_file=None, github_api_base_url=value)
