@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.reviews import router as reviews_router
+from app.api.v1.github import router as github_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.request_limits import ReviewBodyLimitMiddleware
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="API foundation for the CodeGuard AI code review platform.",
         version="0.1.0",
     )
+    application.state.settings = app_settings
     application.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.allowed_origins,
@@ -101,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_exception_handler(SQLAlchemyError, database_unavailable_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
     application.include_router(reviews_router, prefix="/api/v1")
+    application.include_router(github_router, prefix="/api/v1")
 
     @application.get("/health", tags=["system"], summary="Health check")
     def health_check() -> dict[str, str]:

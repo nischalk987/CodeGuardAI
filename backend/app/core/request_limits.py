@@ -1,4 +1,4 @@
-"""Small ASGI request-size guard for the public snippet-review endpoint."""
+"""Small ASGI request-size guards for source submissions and signed webhooks."""
 
 from collections import deque
 from typing import Any
@@ -15,11 +15,16 @@ class ReviewBodyLimitMiddleware:
         self.max_bytes = max_bytes
 
     async def __call__(self, scope: dict[str, Any], receive, send) -> None:
-        if (
-            scope.get("type") != "http"
-            or scope.get("method") != "POST"
-            or scope.get("path") != "/api/v1/reviews"
-        ):
+        if scope.get("type") != "http" or scope.get("method") != "POST":
+            await self.app(scope, receive, send)
+            return
+
+        path_limits = {
+            "/api/v1/reviews": self.max_bytes,
+            "/api/v1/github/webhook": min(self.max_bytes * 5, 250_000),
+        }
+        request_limit = path_limits.get(scope.get("path"))
+        if request_limit is None:
             await self.app(scope, receive, send)
             return
 
@@ -30,11 +35,11 @@ class ReviewBodyLimitMiddleware:
         )
         if content_length is not None:
             try:
-                too_large = int(content_length) > self.max_bytes
+                too_large = int(content_length) > request_limit
             except ValueError:
                 too_large = True
             if too_large:
-                await _too_large(scope, receive, send, request_id, self.max_bytes)
+                await _too_large(scope, receive, send, request_id, request_limit)
                 return
 
         messages: deque[dict[str, Any]] = deque()
@@ -45,8 +50,8 @@ class ReviewBodyLimitMiddleware:
                 return
             messages.append(message)
             total += len(message.get("body", b""))
-            if total > self.max_bytes:
-                await _too_large(scope, receive, send, request_id, self.max_bytes)
+            if total > request_limit:
+                await _too_large(scope, receive, send, request_id, request_limit)
                 return
             if not message.get("more_body", False):
                 break
