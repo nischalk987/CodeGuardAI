@@ -8,7 +8,7 @@
 
 ---
 
-> **Project status: Starter scaffold.** The React dashboard and FastAPI sample endpoints are now in the repository. Findings are sample data; live code scanning, Groq integration, persistence, and GitHub PR review are not implemented yet.
+> **Project status: Early MVP in progress.** The React dashboard and FastAPI sample endpoints are implemented, along with backend configuration, structured logging, CORS, consistent JSON errors, and health checks. The dashboard still uses sample findings; real code scanning, Groq integration, persistence, and GitHub PR review remain in progress.
 
 ## Why CodeGuard AI?
 
@@ -37,10 +37,10 @@ The target workflow:
 
 | Feature | What makes it useful | Status |
 |---|---|---|
-| Review dashboard | Severity summary, searchable/filterable sample findings, and finding triage | Implemented (demo data only) |
-| Developer CLI | Scan a local directory, print text/JSON results, and fail on a configurable severity threshold for scripts/CI | Planned |
+| Review dashboard | Severity summary, searchable/filterable sample findings, and local finding triage | Implemented (demo data only) |
+| Developer CLI | Scan a local directory, print text/JSON results, and fail on a configurable severity threshold for scripts/CI | Planned (Issue #5) |
 | Inline findings | Navigate from a finding to its file and line context | Planned |
-| Static + AI analysis | Pair repeatable rules with contextual explanation | Planned |
+| Static + AI analysis | Pair repeatable rules with contextual explanation | In progress (Issues #4–5) |
 | Confidence-aware triage | Rank findings carefully without pretending model confidence is calibrated probability | Planned |
 | GitHub PR workflow | Review bounded PR diffs with least-privilege access | Planned |
 | Security-first processing | Treat repository content as untrusted input; never execute suggested fixes | Planned |
@@ -96,9 +96,10 @@ CodeGuardAI/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/reviews.py  # Sample review endpoints
-│   │   ├── main.py            # FastAPI app and health check
-│   │   └── schemas.py         # Typed API response models
-│   ├── tests/test_api.py      # API tests
+│   │   ├── main.py            # FastAPI app, health check, middleware
+│   │   ├── schemas.py         # Typed API response models
+│   │   └── ...                # Configuration and logging modules
+│   ├── tests/                 # API and configuration tests
 │   └── pyproject.toml
 ├── .github/                   # Issue and PR templates
 ├── .env.example
@@ -150,7 +151,7 @@ Run frontend checks from `frontend/` with `npm test` and `npm run build`. The da
 pytest
 ```
 
-For development tasks and acceptance criteria, see the [12 open issues](https://github.com/nischalk987/CodeGuardAI/issues). Do not commit real API keys; keep secrets in local environment variables and out of frontend code.
+For development tasks and acceptance criteria, see the [GitHub issue backlog](https://github.com/nischalk987/CodeGuardAI/issues). The backend foundation includes environment-validated settings, configurable CORS, structured/redacted logging, consistent JSON error responses, and health/configuration tests. Do not commit real API keys; keep secrets in backend environment variables and out of frontend code.
 
 ## Quality bar for the MVP
 
@@ -166,12 +167,13 @@ For development tasks and acceptance criteria, see the [12 open issues](https://
 
 The initial implementation backlog is tracked as GitHub issues. The intended order is:
 
-1. **Visible value first:** dashboard and demo review experience.
-2. **Reliable foundation:** FastAPI health/config, domain models, and tests.
-3. **Core analysis:** CLI, Groq adapter, and deterministic static analysis.
-4. **End-to-end flow:** persisted review API and asynchronous worker.
-5. **Signature integration:** GitHub PR import and inline review experience.
-6. **Production-minded polish:** security regression tests, CI, reproducible setup, and documentation.
+1. **Dashboard foundation:** interactive dashboard and clearly labelled demo review (implemented).
+2. **Reliable backend:** configuration, health checks, structured logging, CORS, and API errors (implemented).
+3. **Domain and analysis:** validated Review/Finding models, Groq adapter, and deterministic CLI/static analysis (in progress; Issues #3–5).
+4. **End-to-end flow:** persisted review API and asynchronous worker (Issues #6–7).
+5. **GitHub integration:** least-privilege PR import and inline review experience (Issues #8–9).
+6. **Release readiness:** CI/security checks, reproducible setup, adversarial tests, and portfolio documentation (Issues #10–12).
+7. **Deployment:** publish and verify the frontend/backend after core functionality and checks are complete (Issue #15).
 
 ## Responsible-use note
 
