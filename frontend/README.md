@@ -10,4 +10,6 @@ The Vite development server proxies \`/api\` and \`/health\` to FastAPI on port 
 
 Run \`npm run build\` to type-check and produce a production build.
 
-The current dashboard includes sample findings, filters, search, and finding details. Its demo scan button is illustrative; live scanning is not implemented yet.
+The dashboard includes severity and category filters, search across finding text and line context, severity summaries that follow the visible filters, and finding details with local accept/ignore triage. Findings are illustrative sample data whether loaded from FastAPI or the local fallback. “Preview demo” does not run analysis; live scanning is not implemented.
+
+Run the unit tests with `npm test` and create a production build with `npm run build`.
