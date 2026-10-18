@@ -20,13 +20,14 @@ CodeGuard AI is designed to bring those signals into one focused workflow:
 - **Two complementary reviewers** — deterministic rules for repeatable checks, plus an LLM for contextual explanations and additional hypotheses.
 - **A review you can trust** — findings retain their source; AI suggestions are advisory, not presented as proven vulnerabilities.
 - **A useful first run** — a clearly labelled demo review lets people explore the experience without API credentials.
+- **A developer CLI** — scan local folders, print readable findings or JSON, and use documented exit codes in scripts and CI; local scans do not upload code by default.
 - **Built for real engineering** — typed API contracts, async review jobs, tests, observability, and least-privilege GitHub integration.
 
 ## Product experience
 
 The target workflow:
 
-1. **Choose a source** — explore a sample review, submit a bounded diff, or connect a GitHub pull request.
+1. **Choose a source** — explore a sample review, scan a local folder with the CLI, submit a bounded diff, or connect a GitHub pull request.
 2. **Run analysis** — combine static-analysis results with a structured AI review.
 3. **Prioritize** — group findings by severity and category, with file/line context and supporting evidence.
 4. **Understand** — inspect why a finding matters and review a proposed fix.
@@ -37,6 +38,7 @@ The target workflow:
 | Feature | What makes it useful | Status |
 |---|---|---|
 | Review dashboard | Severity overview, recent reviews, and a guided first-run experience | Planned |
+| Developer CLI | Scan a local directory, print text/JSON results, and fail on a configurable severity threshold for scripts/CI | Planned |
 | Inline findings | Navigate from a finding to its file and line context | Planned |
 | Static + AI analysis | Pair repeatable rules with contextual explanation | Planned |
 | Confidence-aware triage | Rank findings carefully without pretending model confidence is calibrated probability | Planned |
@@ -70,7 +72,7 @@ flowchart LR
 - **API:** Python, FastAPI, Pydantic.
 - **Persistence:** PostgreSQL, SQLAlchemy, Alembic.
 - **Background processing:** Redis-backed queue and an independently runnable worker.
-- **Analysis:** Semgrep adapter plus a provider-neutral AI reviewer interface.
+- **Analysis:** CLI entry point and Semgrep adapter plus a provider-neutral AI reviewer interface.
 - **LLM provider:** Groq API, configured server-side via environment variables.
 - **Quality:** automated unit/integration tests, linting, type checks, Docker Compose, and GitHub Actions.
 
@@ -133,7 +135,7 @@ The initial implementation backlog is tracked as GitHub issues. The intended ord
 
 1. **Visible value first:** dashboard and demo review experience.
 2. **Reliable foundation:** FastAPI health/config, domain models, and tests.
-3. **Core analysis:** Groq adapter and deterministic static analysis.
+3. **Core analysis:** CLI, Groq adapter, and deterministic static analysis.
 4. **End-to-end flow:** persisted review API and asynchronous worker.
 5. **Signature integration:** GitHub PR import and inline review experience.
 6. **Production-minded polish:** security regression tests, CI, reproducible setup, and documentation.
