@@ -75,6 +75,7 @@ def test_invalid_review_transitions_are_rejected(
     completed_at = datetime.now(timezone(timedelta(0)))
     kwargs = {"status": initial}
     if initial is ReviewStatus.COMPLETED:
+        kwargs["created_at"] = completed_at - timedelta(seconds=1)
         kwargs["completed_at"] = completed_at
         kwargs["updated_at"] = completed_at
     review = make_review(**kwargs)
