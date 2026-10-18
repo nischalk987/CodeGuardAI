@@ -1,7 +1,8 @@
-import type { Finding, Review, Severity } from "./types";
+import type { Finding, Review, ReviewDiffFile, Severity } from "./types";
 
 export type FindingCategory = "all" | "security" | "performance" | "quality";
 export type SeverityFilter = "all" | Severity;
+export type FindingLocationSet = ReadonlySet<string>;
 
 const severityOrder: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 const qualityCategories = new Set(["maintainability", "reliability"]);
@@ -18,6 +19,7 @@ export function filterFindings(
   query: string,
   category: FindingCategory,
   severity: SeverityFilter,
+  changedLines: FindingLocationSet = new Set(),
 ): Finding[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   return findings
@@ -29,7 +31,42 @@ export function filterFindings(
         matchesCategory(finding, category) &&
         (severity === "all" || finding.severity === severity);
     })
-    .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+    .sort((a, b) => rankFindings(a, b, changedLines));
+}
+
+/** Ranking: severity first, then confidence signal, then whether the line changed, then stable location. */
+export function rankFindings(a: Finding, b: Finding, changedLines: FindingLocationSet = new Set()): number {
+  return severityOrder[a.severity] - severityOrder[b.severity] ||
+    b.confidence - a.confidence ||
+    Number(changedLines.has(findingLocationKey(b))) - Number(changedLines.has(findingLocationKey(a))) ||
+    compareText(a.file_path, b.file_path) ||
+    a.line - b.line ||
+    compareText(a.id, b.id);
+}
+
+export function findingLocationKey(finding: Pick<Finding, "file_path" | "line">): string {
+  return `${finding.file_path}:${finding.line}`;
+}
+
+export function changedLineKeys(files: ReviewDiffFile[]): Set<string> {
+  return new Set(files.flatMap((file) => file.lines
+    .filter((line) => line.kind === "addition")
+    .map((line) => `${file.path}:${line.line}`)));
+}
+
+export function findingCounts(findings: Finding[]): Record<Severity, number> {
+  return findings.reduce((counts, finding) => {
+    counts[finding.severity] += 1;
+    return counts;
+  }, { critical: 0, high: 0, medium: 0, low: 0 });
+}
+
+export function isValidDismissalReason(reason: string): boolean {
+  return reason.trim().length >= 5 && reason.trim().length <= 500;
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export function isReview(value: unknown): value is Review {
@@ -46,9 +83,23 @@ export function isReview(value: unknown): value is Review {
     counts[finding.severity] += 1;
   }
   const summary = review.summary;
-  return summary.critical === counts.critical && summary.high === counts.high &&
+  const diffFilesValid = review.diff_files === undefined || (
+    Array.isArray(review.diff_files) && review.diff_files.every(isDiffFile)
+  );
+  return diffFilesValid && summary.critical === counts.critical && summary.high === counts.high &&
     summary.medium === counts.medium && summary.low === counts.low &&
     summary.total_findings === review.findings.length;
+}
+
+function isDiffFile(value: unknown): value is ReviewDiffFile {
+  if (!value || typeof value !== "object") return false;
+  const file = value as Partial<ReviewDiffFile>;
+  return typeof file.path === "string" && Array.isArray(file.lines) && file.lines.every((line) => {
+    if (!line || typeof line !== "object") return false;
+    const item = line as ReviewDiffFile["lines"][number];
+    return ["context", "addition", "deletion"].includes(item.kind) &&
+      Number.isInteger(item.line) && item.line > 0 && typeof item.text === "string";
+  });
 }
 
 function isFinding(value: unknown): value is Finding {
@@ -61,5 +112,8 @@ function isFinding(value: unknown): value is Finding {
     typeof finding.title === "string" && typeof finding.message === "string" &&
     typeof finding.explanation === "string" && typeof finding.suggested_fix === "string" &&
     ["static", "ai"].includes(finding.source ?? "") &&
-    Number.isInteger(finding.confidence) && (finding.confidence ?? -1) >= 0 && (finding.confidence ?? 101) <= 100;
+    Number.isInteger(finding.confidence) && (finding.confidence ?? -1) >= 0 && (finding.confidence ?? 101) <= 100 &&
+    (finding.evidence === undefined || finding.evidence === null || typeof finding.evidence === "string") &&
+    (finding.end_line === undefined || finding.end_line === null ||
+      (Number.isInteger(finding.end_line) && finding.end_line >= finding.line!));
 }
