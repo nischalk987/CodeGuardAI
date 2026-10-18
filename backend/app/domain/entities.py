@@ -90,6 +90,8 @@ class Finding:
     status: FindingStatus = FindingStatus.OPEN
     certainty: EvidenceCertainty | None = None
     id: str = ""
+    analyzer_name: str | None = None
+    analyzer_version: str | None = None
 
     def __post_init__(self) -> None:
         source = _enum_value(FindingSource, self.source, "source")
@@ -112,6 +114,10 @@ class Finding:
         object.__setattr__(self, "message", _required_text(self.message, "message"))
         object.__setattr__(self, "file_path", _normalize_path(self.file_path))
         object.__setattr__(self, "evidence", _required_text(self.evidence, "evidence"))
+        if self.analyzer_name is not None:
+            object.__setattr__(self, "analyzer_name", _required_text(self.analyzer_name, "analyzer_name"))
+        if self.analyzer_version is not None:
+            object.__setattr__(self, "analyzer_version", _required_text(self.analyzer_version, "analyzer_version"))
         if self.suggested_fix is not None:
             object.__setattr__(self, "suggested_fix", _required_text(self.suggested_fix, "suggested_fix"))
         if not isinstance(self.start_line, int) or isinstance(self.start_line, bool) or self.start_line < 1:

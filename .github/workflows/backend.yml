@@ -29,3 +29,6 @@ jobs:
       - name: Test
         working-directory: backend
         run: pytest
+      - name: CLI fixture smoke check
+        working-directory: backend
+        run: codeguard scan tests/fixtures --format json
