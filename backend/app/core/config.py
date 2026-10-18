@@ -60,6 +60,43 @@ class Settings(BaseSettings):
     ai_review_max_input_bytes: int = Field(
         default=40_000, validation_alias="AI_REVIEW_MAX_INPUT_BYTES", ge=1, le=200_000
     )
+    github_app_id: str | None = Field(default=None, validation_alias="GITHUB_APP_ID")
+    github_private_key_path: str | None = Field(default=None, validation_alias="GITHUB_PRIVATE_KEY_PATH")
+    github_webhook_secret: SecretStr | None = Field(
+        default=None, validation_alias="GITHUB_WEBHOOK_SECRET", repr=False
+    )
+    github_api_base_url: str = Field(
+        default="https://api.github.com", validation_alias="GITHUB_API_BASE_URL"
+    )
+    github_max_diff_bytes: int = Field(
+        default=100_000, validation_alias="GITHUB_MAX_DIFF_BYTES", ge=1_000, le=500_000
+    )
+    github_max_files: int = Field(
+        default=50, validation_alias="GITHUB_MAX_FILES", ge=1, le=100
+    )
+
+    @field_validator("github_app_id", "github_private_key_path", mode="before")
+    @classmethod
+    def normalize_github_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("github_webhook_secret", mode="before")
+    @classmethod
+    def normalize_github_webhook_secret(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("github_api_base_url")
+    @classmethod
+    def validate_github_api_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        parsed = urlsplit(normalized)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+            raise ValueError("GITHUB_API_BASE_URL must be an HTTPS base URL")
+        return normalized
 
     @field_validator("groq_api_key", mode="before")
     @classmethod

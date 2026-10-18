@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -58,3 +58,30 @@ class FindingRow(Base):
     analyzer_version: Mapped[str | None] = mapped_column(String(80))
     certainty: Mapped[str] = mapped_column(String(16), nullable=False)
     review: Mapped[ReviewRow] = relationship(back_populates="findings")
+
+
+class GitHubDeliveryRow(Base):
+    __tablename__ = "github_webhook_deliveries"
+
+    delivery_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    repository: Mapped[str] = mapped_column(String(200), nullable=False)
+    pull_request_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    commit_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_id: Mapped[str | None] = mapped_column(ForeignKey("reviews.id", ondelete="RESTRICT"))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    enqueue_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class GitHubPullRequestReviewRow(Base):
+    __tablename__ = "github_pull_request_reviews"
+
+    repository: Mapped[str] = mapped_column(String(200), primary_key=True)
+    pull_request_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    commit_sha: Mapped[str] = mapped_column(String(64), primary_key=True)
+    review_id: Mapped[str] = mapped_column(
+        ForeignKey("reviews.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    installation_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
