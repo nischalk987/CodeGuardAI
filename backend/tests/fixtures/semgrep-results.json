@@ -1,0 +1,18 @@
+{
+  "version": "1.129.0",
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.dynamic-eval",
+      "path": "src/example.py",
+      "start": {"line": 7, "col": 1},
+      "end": {"line": 7, "col": 20},
+      "extra": {
+        "message": "Dynamic evaluation of input.",
+        "severity": "ERROR",
+        "lines": "result = eval(user_input)",
+        "fix": "Use a safe parser.",
+        "metadata": {"category": "security", "confidence": "HIGH"}
+      }
+    }
+  ]
+}

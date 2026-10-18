@@ -32,6 +32,70 @@ API docs: http://127.0.0.1:8000/docs
 ## Tests
 Run `pytest` and `ruff check app tests` after installing the dev extras.
 
+## Local CLI scanning
+
+The `codeguard` command is installed with the backend package. Its default analyzer runs a
+small, deterministic set of local checks for likely hard-coded credentials, dynamic execution,
+shell-enabled subprocess calls, and disabled TLS verification. These checks are evidence-based
+patterns, not a complete security audit. They read supported source files as data and never
+execute repository code. The CLI does not invoke AI review or upload source files unless the
+explicit `--ai-review` flag is supplied for one source file.
+
+The built-in analyzer supports `.py`, `.js`, `.jsx`, `.ts`, and `.tsx`, skips unsupported files
+when scanning a directory, and reports an error for an explicitly selected unsupported file. It
+scans at most 10,000 files and reads at most 1 MB from each file.
+
+```bash
+# From backend/ after installing the package
+codeguard scan ../frontend/src
+codeguard scan ../backend/app --format json
+codeguard scan . --fail-on high
+codeguard scan . --ignore .venv --ignore node_modules
+```
+
+AI review requires an explicit opt-in, a configured `GROQ_API_KEY` in the backend environment,
+and a single source file. Immediately before the request, the CLI discloses that this file will
+be sent to Groq; no directory or neighboring files are sent. AI findings remain advisory
+hypotheses.
+
+```bash
+codeguard scan src/module.py --ai-review
+```
+
+Exit codes are stable for scripts and CI: `0` means the scan completed without a finding at the
+selected threshold, `1` means at least one finding met `--fail-on`, and `2` means scanning could
+not complete (invalid path, missing analyzer, timeout, or malformed output). `--fail-on` accepts
+`none`, `critical`, `high`, `medium`, or `low`; `none` is the default. Text output includes the
+file, line, severity, rule ID, message, and analyzer provenance. JSON output uses schema version
+`1.0`, includes the shared domain Finding fields and analyzer/version provenance, and groups
+duplicates without dropping their individual findings.
+
+The JSON envelope has `schema_version`, `scan`, `summary`, and `finding_groups`. Each group's
+`findings` array contains complete shared Finding records (`id`, `rule_id`, `source`, analyzer
+name/version, severity, category, message, file path, inclusive line range, confidence, certainty,
+original evidence, and optional suggested fix). Group members retain distinct rule IDs and
+provenance; `duplicate_count` counts additional members beyond the first.
+
+### Optional Semgrep
+
+Semgrep is optional. Install it with `python -m pip install -e ".[dev,semgrep]"`, then select it:
+
+```bash
+codeguard scan . --analyzer semgrep --fail-on high
+# Run built-in checks and Semgrep together; duplicate rules are grouped with both provenances.
+codeguard scan . --analyzer all --format json
+```
+
+The CLI uses `semgrep scan`, not `semgrep ci` or a platform upload command. It disables Semgrep
+metrics, runs one worker, caps individual target size, and enforces a wall-clock timeout. The
+default `--semgrep-config auto` may download rule definitions from Semgrep's registry; it does
+not send source files. Use `--semgrep-config /path/to/rules.yml` for a local rules file. Source is
+processed on the local machine and no repository code is executed. See Semgrep's
+[local CLI scan documentation](https://semgrep.dev/docs/category/local-and-cli-scans).
+
+Static and AI findings use the same domain schema while retaining their `source`, rule, and
+analyzer provenance. Suggested fixes are informational only and are never applied.
+
 ## Configuration
 
 The API uses Pydantic Settings. Environment variables override the optional `.env` file in the backend working directory.
@@ -93,10 +157,11 @@ limits](https://console.groq.com/docs/rate-limits). Rate limits fail safely with
 retry, while timeouts, network failures, and transient server errors use the configured bounded
 retry count. Malformed model output is rejected without repair attempts.
 
-This adapter is a backend application component; it does not change or replace the static sample
-review endpoints, and this issue does not wire it into the demo dashboard.
+The CLI can invoke this adapter only when `--ai-review` is explicitly passed for one source file.
+It displays a Groq upload disclosure before the request, tags results with AI provenance, and
+does not change the static sample-review endpoints or demo dashboard.
 
 ## Current status
-The sample API endpoints return static sample data. The backend includes an optional, programmatic
-Groq AI reviewer adapter, but it does not persist reviews, authenticate users, or connect to
-GitHub yet.
+The sample API endpoints return static sample data. The backend includes a local CLI with built-in
+deterministic checks, an optional Semgrep analyzer, and an explicit single-file Groq review option.
+It does not persist reviews, authenticate users, or connect to GitHub yet.

@@ -8,7 +8,7 @@
 
 ---
 
-> **Project status: Early MVP in progress.** The React dashboard and FastAPI sample endpoints are implemented, along with backend configuration, structured logging, CORS, consistent JSON errors, and health checks. The dashboard still uses sample findings; real code scanning, Groq integration, persistence, and GitHub PR review remain in progress.
+> **Project status: Early MVP in progress.** The React dashboard and FastAPI sample endpoints are implemented, along with backend configuration, structured logging, CORS, consistent JSON errors, and health checks. Local deterministic scanning and an optional Semgrep CLI analyzer are implemented. Groq review is available through an explicit single-file CLI opt-in; dashboard scanning, persistence, and GitHub PR review remain in progress.
 
 ## Why CodeGuard AI?
 
@@ -38,9 +38,9 @@ The target workflow:
 | Feature | What makes it useful | Status |
 |---|---|---|
 | Review dashboard | Severity summary, searchable/filterable sample findings, and local finding triage | Implemented (demo data only) |
-| Developer CLI | Scan a local directory, print text/JSON results, and fail on a configurable severity threshold for scripts/CI | Planned (Issue #5) |
+| Developer CLI | Scan a local directory with deterministic checks, optional Semgrep, text/JSON output, and a configurable severity threshold | Implemented (remote AI is single-file and explicit opt-in) |
 | Inline findings | Navigate from a finding to its file and line context | Planned |
-| Static + AI analysis | Pair repeatable rules with contextual explanation | In progress (Issues #4–5) |
+| Static + AI analysis | Pair repeatable rules with contextual explanation | Implemented in the CLI (remote AI requires explicit opt-in) |
 | Confidence-aware triage | Rank findings carefully without pretending model confidence is calibrated probability | Planned |
 | GitHub PR workflow | Review bounded PR diffs with least-privilege access | Planned |
 | Security-first processing | Treat repository content as untrusted input; never execute suggested fixes | Planned |
@@ -95,11 +95,14 @@ CodeGuardAI/
 ├── frontend/                 # React + TypeScript application
 ├── backend/
 │   ├── app/
+│   │   ├── analysis/          # Built-in and optional Semgrep analyzers
 │   │   ├── api/v1/reviews.py  # Sample review endpoints
+│   │   ├── cli.py             # `codeguard scan` command
+│   │   ├── domain/            # Framework-independent review/finding model
 │   │   ├── main.py            # FastAPI app, health check, middleware
 │   │   ├── schemas.py         # Typed API response models
 │   │   └── ...                # Configuration and logging modules
-│   ├── tests/                 # API and configuration tests
+│   ├── tests/                 # API, domain, analyzer, and CLI tests
 │   └── pyproject.toml
 ├── .github/                   # Issue and PR templates
 ├── .env.example
@@ -108,7 +111,7 @@ CodeGuardAI/
 └── README.md
 ```
 
-This shows the **current starter structure**; domain, application, infrastructure, database, and worker modules will be added as those issues are implemented.
+This shows the current implementation. Persistence and worker modules remain future work.
 
 ## Getting started
 
@@ -139,7 +142,7 @@ npm run dev
 
 Open the Vite URL shown in the terminal, usually [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI attempts to load the backend's sample review and falls back to local sample data when the API is unavailable.
 
-Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. Its “Preview demo” control only explains this limitation; it does not run a scan.
+Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. The backend CLI scans local files with deterministic checks and can optionally invoke Semgrep. AI review requires the explicit `--ai-review` flag for a single file and discloses that the file will be sent to Groq. Full usage and exit codes are documented in [backend/README.md](backend/README.md#local-cli-scanning).
 
 ### Dashboard preview
 
