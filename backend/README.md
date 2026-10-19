@@ -85,10 +85,9 @@ codeguard scan . --fail-on high
 codeguard scan . --ignore .venv --ignore node_modules
 ```
 
-AI review requires an explicit opt-in, a configured `GROQ_API_KEY` in the backend environment,
-and a single source file. Immediately before the request, the CLI discloses that this file will
-be sent to Groq; no directory or neighboring files are sent. AI findings remain advisory
-hypotheses.
+AI review requires an explicit opt-in, a configured credential for the selected `AI_PROVIDER`,
+and a single source file. Immediately before the request, the CLI discloses the provider; no
+directory or neighboring files are sent. AI findings remain advisory hypotheses.
 
 ```bash
 codeguard scan src/module.py --ai-review
@@ -130,7 +129,7 @@ analyzer provenance. Suggested fixes are informational only and are never applie
 
 ## Configuration
 
-The API uses Pydantic Settings. Environment variables override the optional `.env` file in the backend working directory.
+The API uses Pydantic Settings. Environment variables override the optional `.env` file in the backend working directory. Copy `backend/.env.example` for local development; credential values are intentionally blank. Put deployment variables in backend-only hosting settings, never frontend build variables.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -141,10 +140,15 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `CORS_ORIGINS` | local Vite origins in development | JSON array of allowed origins |
 | `DATABASE_URL` | none | Backend-only PostgreSQL connection URL |
 | `REDIS_URL` | `redis://localhost:6379/0` | Celery broker URL for background reviews |
+| `AI_PROVIDER` | `groq` | Optional AI reviewer provider: `groq` or `huggingface` |
 | `GROQ_API_KEY` | none | Optional backend-only Groq credential |
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Groq model supporting JSON Schema structured output |
 | `GROQ_TIMEOUT_SECONDS` | `20` | Per-request SDK timeout, from 0 (exclusive) to 120 seconds |
 | `GROQ_MAX_RETRIES` | `2` | Bounded retries for timeouts, connection errors, and transient 5xx errors (0–3) |
+| `HF_TOKEN` | none | Optional backend-only Hugging Face Inference Providers token |
+| `HF_MODEL` | `openai/gpt-oss-20b` | Hugging Face Inference Providers model ID |
+| `HF_TIMEOUT_SECONDS` | `30` | Per-request timeout, from 0 (exclusive) to 120 seconds |
+| `HF_MAX_RETRIES` | `2` | Bounded retries for timeouts, connection errors, and transient 5xx errors (0–3) |
 | `AI_REVIEW_MAX_INPUT_BYTES` | `40000` | Maximum UTF-8 bytes sent for a single source file |
 | `GITHUB_APP_ID` | none | Optional GitHub App ID used by the backend worker |
 | `GITHUB_PRIVATE_KEY_PATH` | none | Path to the private GitHub App PEM file; never commit the file |
@@ -153,7 +157,7 @@ The API uses Pydantic Settings. Environment variables override the optional `.en
 | `GITHUB_MAX_DIFF_BYTES` | `100000` | Maximum aggregate PR patch bytes fetched for a review |
 | `GITHUB_MAX_FILES` | `50` | Maximum changed files fetched per PR |
 
-For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. The Groq key is a Pydantic `SecretStr`, is never logged, and is not included in responses. Keep real local `.env` files out of version control.
+For production, set `FRONTEND_ORIGIN` or `CORS_ORIGINS` explicitly. The API emits JSON logs and redacts common credential fields and token-shaped message values. Error responses use `{"error": {"code", "message", "request_id"}}`; internal exception details are logged with the request ID and are not returned to callers. Provider credentials are Pydantic `SecretStr` values, are never logged, and are not included in responses. Keep real local `.env` files out of version control.
 
 ### Database setup and migrations
 
@@ -206,33 +210,45 @@ analysis.
 
 ## Advisory AI reviewer
 
-`app.ai.AIReviewer` is a provider-independent async interface. `app.infrastructure.ai.GroqAIReviewer`
-implements it using the Groq SDK and returns validated `app.domain.Finding` entities. It accepts one
-repository-relative source file per call. The adapter enforces the configured UTF-8 input limit,
+`app.ai.AIReviewer` is a provider-independent async interface. Groq remains the default; setting
+`AI_PROVIDER=huggingface` selects `app.infrastructure.ai.HuggingFaceAIReviewer` through Hugging Face
+Inference Providers. Both adapters share the structured-output validation pipeline and return
+validated `app.domain.Finding` entities. Each accepts one repository-relative source file per call.
+The adapter enforces the configured UTF-8 input limit,
 requests strict JSON Schema output, validates that output with Pydantic, checks line ranges and
 source evidence, and rejects references to another file. The versioned prompt treats code and
 comments as untrusted data. Findings are always marked as AI hypotheses; suggested fixes are
 descriptive text and are never executed or applied.
 
-To enable the adapter locally, set `GROQ_API_KEY` in a private backend `.env` file or in the
-backend process environment. The key is optional for running the existing demo API. Model IDs are
-configurable because supported models can change. The adapter requires a model with Groq JSON
-Schema structured output support. Free-tier request and token quotas depend on the account and
-selected model, can change, and may cause rate-limit or quota errors; check [Groq's current rate
-limits](https://console.groq.com/docs/rate-limits). Rate limits fail safely without an automatic
-retry, while timeouts, network failures, and transient server errors use the configured bounded
-retry count. Malformed model output is rejected without repair attempts.
+To enable Groq, set `GROQ_API_KEY` in a private backend `.env` file or backend process environment.
+Groq remains the default when `AI_PROVIDER` is omitted. To use Hugging Face, set
+`AI_PROVIDER=huggingface` and set `HF_TOKEN` to a fine-grained token allowed to call Inference
+Providers. Set `HF_MODEL` to a model listed in Hugging Face's [Inference Providers catalog](https://huggingface.co/inference/models?model=openai%2Fgpt-oss-20b);
+the default `openai/gpt-oss-20b` is listed with live providers and structured-output support. Groq's
+default `openai/gpt-oss-20b` is listed as active and supports JSON Schema output in [Groq's model
+catalog](https://console.groq.com/docs/models) and [structured output documentation](https://console.groq.com/docs/structured-outputs).
+Availability, schema support, provider routing, account permissions, and free-tier quotas may vary
+over time or by account. Both adapters use configurable timeouts and capped retries; timeouts,
+network failures, and transient server errors retry within the configured bound, while rate limits
+fail without retry. Provider response details are not returned to callers. Malformed model output
+is rejected without repair attempts.
 
-The CLI can invoke this adapter only when `--ai-review` is explicitly passed for one source file.
-It displays a Groq upload disclosure before the request, tags results with AI provenance, and
-does not change the static sample-review endpoints or demo dashboard.
+The CLI can invoke the configured adapter only when `--ai-review` is explicitly passed for one
+source file. It displays a provider-specific upload disclosure before the request, tags results
+with provider/model provenance, and does not change the static sample-review endpoints or demo
+dashboard. For deployments, set `AI_PROVIDER`, the selected provider's model, and its token as
+backend service variables/secrets. Never put either token in frontend hosting variables or a
+checked-in `.env` file.
 
 ## Current status
 The sample API endpoints remain available. Persisted review endpoints use PostgreSQL when
 `DATABASE_URL` and the additive Alembic migrations are configured. Review creation returns a
 queued job ID and a separate Celery worker updates its persisted lifecycle; Redis is the job broker.
-The backend also includes a local CLI, optional Semgrep analyzer, and explicit single-file Groq
-review option. GitHub pull-request intake is optional and requires a separately installed GitHub App.
+The backend also includes a local CLI, optional Semgrep analyzer, and explicit single-file AI
+review option for Groq or Hugging Face Inference Providers. Authentication and GitHub integration
+remain future work.
+
+GitHub pull-request intake is optional and requires a separately installed GitHub App.
 
 ### GitHub pull-request reviews
 

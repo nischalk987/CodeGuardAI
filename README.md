@@ -73,7 +73,7 @@ flowchart LR
 - **Persistence:** PostgreSQL, SQLAlchemy, Alembic.
 - **Background processing:** Redis-backed queue and an independently runnable worker.
 - **Analysis:** CLI entry point and Semgrep adapter plus a provider-neutral AI reviewer interface.
-- **LLM provider:** Groq API, configured server-side via environment variables.
+- **LLM providers:** Groq (default) or Hugging Face Inference Providers, configured server-side through backend environment variables.
 - **Quality:** automated unit/integration tests, linting, type checks, Docker Compose, and GitHub Actions.
 
 Exact dependency and model choices will be documented and pinned as implementation begins.
@@ -143,7 +143,7 @@ npm run dev
 
 Open the Vite URL shown in the terminal, usually [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI attempts to load the backend's sample review and falls back to local sample data when the API is unavailable.
 
-Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. The backend API and CLI run local deterministic checks and can optionally invoke Semgrep. AI review requires the explicit `--ai-review` flag for a single file and discloses that the file will be sent to Groq. Full usage and exit codes are documented in [backend/README.md](backend/README.md#local-cli-scanning).
+Run frontend checks from `frontend/` with `npm test` and `npm run build`. The dashboard displays seeded illustrative findings and does not analyze source code. The backend API and CLI run local deterministic checks and can optionally invoke Semgrep. AI review requires the explicit `--ai-review` flag for a single file and discloses which configured provider receives it. Full usage and exit codes are documented in [backend/README.md](backend/README.md#local-cli-scanning).
 
 ### Dashboard preview
 

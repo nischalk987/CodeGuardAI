@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr | None = Field(
         default=None, validation_alias="GROQ_API_KEY", repr=False
     )
+    ai_provider: Literal["groq", "huggingface"] = Field(
+        default="groq", validation_alias="AI_PROVIDER"
+    )
+    hf_token: SecretStr | None = Field(default=None, validation_alias="HF_TOKEN", repr=False)
     database_url: SecretStr | None = Field(
         default=None, validation_alias="DATABASE_URL", repr=False
     )
@@ -46,6 +50,13 @@ class Settings(BaseSettings):
         default=20.0, validation_alias="GROQ_TIMEOUT_SECONDS", gt=0, le=120
     )
     groq_max_retries: int = Field(default=2, validation_alias="GROQ_MAX_RETRIES", ge=0, le=3)
+    hf_model: str = Field(
+        default="openai/gpt-oss-20b", validation_alias="HF_MODEL", min_length=1, max_length=160
+    )
+    hf_timeout_seconds: float = Field(
+        default=30.0, validation_alias="HF_TIMEOUT_SECONDS", gt=0, le=120
+    )
+    hf_max_retries: int = Field(default=2, validation_alias="HF_MAX_RETRIES", ge=0, le=3)
     ai_review_max_input_bytes: int = Field(
         default=40_000, validation_alias="AI_REVIEW_MAX_INPUT_BYTES", ge=1, le=200_000
     )
@@ -95,6 +106,14 @@ class Settings(BaseSettings):
             return value or None
         return value
 
+    @field_validator("hf_token", mode="before")
+    @classmethod
+    def normalize_hf_token(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
     @field_validator("database_url", mode="before")
     @classmethod
     def validate_database_url(cls, value: object) -> object:
@@ -137,6 +156,14 @@ class Settings(BaseSettings):
         normalized = value.strip()
         if not normalized:
             raise ValueError("GROQ_MODEL must not be blank")
+        return normalized
+
+    @field_validator("hf_model")
+    @classmethod
+    def normalize_hf_model(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("HF_MODEL must not be blank")
         return normalized
 
     @field_validator("frontend_origin")
