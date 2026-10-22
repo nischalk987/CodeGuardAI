@@ -158,3 +158,46 @@ def test_suggested_fix_is_a_proposal_and_never_executed(tmp_path, monkeypatch):
     assert findings[0].suggested_fix == dangerous
     assert not (tmp_path / "SHOULD_NOT_EXIST").exists()
     assert len(client.calls) == 1
+
+
+def test_provider_concurrency_is_bounded_per_reviewer_instance():
+    class TrackingCompletions:
+        def __init__(self):
+            self.active = 0
+            self.peak_active = 0
+            self.calls = 0
+
+        async def create(self, **kwargs):
+            self.calls += 1
+            self.active += 1
+            self.peak_active = max(self.peak_active, self.active)
+            try:
+                await asyncio.sleep(0.01)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"findings": []}'))]
+                )
+            finally:
+                self.active -= 1
+
+    settings = Settings(
+        _env_file=None,
+        groq_api_key="gsk_fake_test_key",
+        ai_review_max_concurrency=1,
+        groq_max_retries=0,
+    )
+    client = TrackingCompletions()
+    reviewer = GroqAIReviewer(
+        settings,
+        client=SimpleNamespace(chat=SimpleNamespace(completions=client)),
+    )
+
+    async def run_two_reviews():
+        return await asyncio.gather(
+            reviewer.review(file_path="one.py", source_code="pass"),
+            reviewer.review(file_path="two.py", source_code="pass"),
+        )
+
+    results = asyncio.run(run_two_reviews())
+    assert results == [[], []]
+    assert client.calls == 2
+    assert client.peak_active == 1
