@@ -35,6 +35,9 @@ class SqlAlchemyReviewRepository:
         row.completed_at = review.completed_at
         row.correlation_id = review.correlation_id
         row.failure_reason = review.failure_reason
+        row.ai_review_requested = review.ai_review_requested
+        row.ai_review_status = review.ai_review_status
+        row.ai_review_message = review.ai_review_message
         row.findings = [_finding_row(review.id, finding) for finding in review.findings]
         self._session.commit()
 
@@ -54,6 +57,8 @@ class SqlAlchemyReviewRepository:
             correlation_id=review.correlation_id,
             idempotency_key=idempotency_key,
             request_hash=request_hash,
+            ai_review_requested=review.ai_review_requested,
+            ai_review_status=review.ai_review_status,
         )
         self._session.add(row)
         self._session.commit()
@@ -190,6 +195,9 @@ def _to_domain(row: ReviewRow) -> Review:
         completed_at=_aware_utc(row.completed_at) if row.completed_at else None,
         correlation_id=row.correlation_id,
         failure_reason=row.failure_reason,
+        ai_review_requested=row.ai_review_requested,
+        ai_review_status=row.ai_review_status,
+        ai_review_message=row.ai_review_message,
         findings=findings,
         summary=ReviewSummary.from_findings(findings, row.summary_text),
     )
