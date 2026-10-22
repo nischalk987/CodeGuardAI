@@ -111,3 +111,13 @@ class RepositoryRow(Base):
     default_branch: Mapped[str] = mapped_column(String(100), nullable=False, default="main")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (Index("uq_user_repository_url", "owner_user_id", "url", unique=True),)
+
+
+class GitHubOAuthConnectionRow(Base):
+    """Encrypted user GitHub OAuth credential; raw access tokens are never stored."""
+
+    __tablename__ = "github_oauth_connections"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    github_login: Mapped[str] = mapped_column(String(100), nullable=False)
+    encrypted_access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
