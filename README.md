@@ -105,7 +105,7 @@ This command sends that selected file to the configured hosted provider. Do not 
 
 ![CodeGuard AI architecture](docs/architecture.svg)
 
-The diagram distinguishes the working API/queue/analysis foundations from optional AI/Semgrep paths and incomplete GitHub PR review. The dashboard preview remains seeded demo data, not a live scan. See the [2–3 minute walkthrough](docs/DEMO_WALKTHROUGH.md).
+The diagram distinguishes the working API/queue/analysis foundations from optional AI/Semgrep paths and incomplete GitHub PR review. The dashboard preview remains seeded demo data, not a live scan. See the [2–3 minute walkthrough](docs/DEMO_WALKTHROUGH.md). The [Demo screenshot workflow](https://github.com/nischalk987/CodeGuardAI/actions/workflows/demo-screenshot.yml) launches the real Vite app in Chromium and uploads a `codeguard-dashboard-demo` screenshot artifact (30-day retention); the dashboard itself labels the content `DEMO DATA · SAMPLE REVIEW`.
 
 The system is organized as a modular monolith: one FastAPI API with explicit domain/application/adapter boundaries, plus a separately runnable queue worker for longer jobs. This is simpler to develop and test than splitting an early MVP into multiple networked microservices. Provider-specific APIs sit behind adapters; the deterministic analyzer remains useful when model credentials or network access are unavailable.
 
@@ -183,7 +183,7 @@ Canonical placeholder configuration: [`.env.example`](.env.example) and [`backen
 - Finish GitHub PR diff retrieval, bounded analysis orchestration, and review summary delivery.
 - Add verified end-to-end integration tests and a safe disposable deployment.
 - Improve language/rule coverage, calibrate confidence carefully, and add richer diff-context handling.
-- Capture and maintain a current browser screenshot of the real dashboard demo. The architecture diagram is provided now; a runtime screenshot is not included because it must be captured from a running app, not simulated.
+- Keep the CI-captured browser screenshot artifact current when the dashboard changes. The workflow captures the app at runtime; it is not a fabricated UI mockup.
 
 ## Known limitations
 
