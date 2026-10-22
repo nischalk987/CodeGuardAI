@@ -26,6 +26,8 @@ def test_create_and_retrieve_review_persists_across_app_instances(
     result = review_client.get(f"/api/v1/reviews/{created.json()['review_id']}").json()
     assert result["status"] == "completed"
     assert result["findings"][0]["file_path"] == "src/auth.py"
+    assert result["findings"][0]["line"] == 1
+    assert result["findings"][0]["severity"] in {"critical", "high", "medium", "low"}
     assert result["findings"][0]["rule_id"] == "CG.SEC.HARDCODED_CREDENTIAL"
     assert "not-a-placeholder" not in result["findings"][0]["evidence"]
     assert result["summary"]["total_findings"] == 1
@@ -157,3 +159,37 @@ def test_history_pagination_limits_are_validated(review_client: TestClient) -> N
 
     assert too_many.status_code == 422
     assert negative.status_code == 422
+
+
+def test_queue_failure_is_persisted_and_visible_in_review_detail(
+    review_client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import reviews as routes
+
+    def fail_enqueue(*_args):
+        raise RuntimeError("queue is offline")
+
+    monkeypatch.setattr(routes, "enqueue_review_task", fail_enqueue)
+    created = review_client.post(
+        "/api/v1/reviews",
+        json={
+            "source_code": 'password = "local-only-secret"\n',
+            "file_path": "src/auth.py",
+            "repository": "example/payments",
+            "branch": "feature/retry",
+        },
+    )
+    assert created.status_code == 503
+
+    history = review_client.get("/api/v1/reviews")
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    failed = history.json()[0]
+    assert failed["status"] == "failed"
+    assert failed["failure_reason"] == "The review queue is temporarily unavailable. Please retry."
+
+    detail = review_client.get(f"/api/v1/reviews/{failed['review_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "failed"
+    assert detail.json()["repository"] == "example/payments"
+    assert detail.json()["branch"] == "feature/retry"
