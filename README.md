@@ -22,7 +22,7 @@ The goal is not to replace human review or promise perfect vulnerability detecti
 
 | Capability | Status | Notes |
 |---|---|---|
-| React + TypeScript dashboard | **Implemented** | Search/filter sample findings, severity summaries, detail view, local triage; content is demo data |
+| React + TypeScript dashboard | **Implemented** | Search/filter sample findings, severity summaries, detail view, local triage; content is demo data |\n| Email/password sign-up and sign-in | **Implemented in this branch** | PostgreSQL user records, scrypt password hashes, signed 12-hour bearer tokens; configure `AUTH_SECRET_KEY` before use |
 | FastAPI API and health endpoint | **Implemented** | OpenAPI docs and consistent error responses |
 | Local deterministic CLI scan | **Implemented** | Built-in rules; can scan local files/directories |
 | Optional Semgrep adapter | **Implemented** | Requires Semgrep to be installed/configured locally |
@@ -33,6 +33,20 @@ The goal is not to replace human review or promise perfect vulnerability detecti
 | End-to-end PR diff fetch, complete analysis, and inline comments | **Planned / incomplete** | Do not treat webhook intake as a finished PR-review integration |
 | Dashboard submits real code for scanning | **Planned / incomplete** | Current dashboard preview uses demo findings |
 | Automatically apply AI fixes | **Not supported by design** | Suggested fixes are proposals for human review |
+
+## Account authentication
+
+The API exposes `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`. The frontend shows sign-in/sign-up first and checks the current account on reload. Passwords are hashed with scrypt; the API never returns password hashes.
+
+Before starting with Docker Compose, create a local `.env` file and set a unique signing secret (at least 32 characters). For example, generate one with Python:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Set the output as `AUTH_SECRET_KEY=...` in `.env`, then run `docker compose up --build`. The API container applies Alembic migrations before starting. Keep `.env` private and never commit real secrets.
+
+**Current limitations:** email verification, password reset, MFA, OAuth, refresh-token rotation, and user-scoped repository/review ownership are not included yet. Do not expose this early-MVP auth flow publicly until rate limiting, email verification, password reset, and a production secret-management plan are added.
 
 ## Try the demo
 

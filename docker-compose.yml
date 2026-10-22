@@ -9,6 +9,7 @@ services:
       CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
       DATABASE_URL: postgresql+psycopg://codeguard:${POSTGRES_PASSWORD:-codeguard}@postgres:5432/codeguard
       REDIS_URL: redis://redis:6379/0
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
       AI_PROVIDER: groq
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       HF_TOKEN: ${HF_TOKEN:-}

@@ -10,6 +10,7 @@ import { demoDiffFiles, demoReview } from "./demo";
 import { DismissReasonDialog } from "./DismissReasonDialog";
 import { ReviewDiff } from "./ReviewDiff";
 import { ReviewSummaryPanel } from "./ReviewSummaryPanel";
+import AuthPage, { clearAuth, readAuthToken } from "./AuthPage";
 import { changedLineKeys, filterFindings, findingCounts, isReview } from "./review";
 import type { Finding, FindingDecision, FindingDisposition, FindingDispositionMap, Review, Severity } from "./types";
 
@@ -17,6 +18,8 @@ type FindingFilter = "all" | "security" | "performance" | "quality";
 const dispositionStorageKey = (reviewId: string) => `codeguard:review-dispositions:${reviewId}`;
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<{id:string;email:string;display_name:string} | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [review, setReview] = useState<Review>(demoReview);
   const [apiConnected, setApiConnected] = useState(false);
   const [apiError, setApiError] = useState("");
@@ -30,6 +33,21 @@ export default function App() {
   const [dismissTarget, setDismissTarget] = useState<Finding | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [diffNavigationVersion, setDiffNavigationVersion] = useState(0);
+
+  useEffect(() => {
+    const token = readAuthToken();
+    if (!token) { setAuthChecking(false); return; }
+    let active = true;
+    fetch("/api/v1/auth/me", { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+      .then(async response => {
+        if (!response.ok) throw new Error("Session expired");
+        return response.json();
+      })
+      .then(user => { if (active) setAuthUser(user); })
+      .catch(() => { if (active) { clearAuth(); setAuthUser(null); } })
+      .finally(() => { if (active) setAuthChecking(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,6 +120,9 @@ export default function App() {
     setFindingDisposition(id, dispositions[id]?.decision === "accepted" ? "open" : "accepted");
   }
 
+  if (authChecking) return <div className="auth-loading">Checking your session…</div>;
+  if (!authUser) return <AuthPage onAuthenticated={setAuthUser} />;
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -109,7 +130,7 @@ export default function App() {
           <span className="brand-mark"><ShieldCheck size={22} /></span>
           <span className="brand-copy">codeguard<span>AI</span><small>CODE INTELLIGENCE</small></span>
         </a>
-        <div className="workspace-picker"><div className="workspace-avatar">N</div><div className="workspace-meta"><strong>Personal workspace</strong><span>Developer plan</span></div><ChevronDown size={15} /></div>
+        <div className="workspace-picker"><div className="workspace-avatar">{authUser.display_name.slice(0,1).toUpperCase()}</div><div className="workspace-meta"><strong>Personal workspace</strong><span>{authUser.email}</span></div><ChevronDown size={15} /></div>
         <p className="nav-label">WORKSPACE</p>
         <nav className="side-nav" aria-label="Main navigation">
           <a className="nav-item active" href="#overview"><LayoutDashboard size={17} /> Overview <span className="nav-pip" /></a>
@@ -125,7 +146,7 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="usage-card"><div className="usage-head"><span>MONTHLY ANALYSIS</span><Zap size={14} /></div><div className="usage-numbers"><strong>128</strong><span>/ 500 sample scans</span></div><div className="usage-track"><span /></div><p>Illustrative workspace metric</p></div>
           <a className="nav-item settings-link" href="#architecture"><Activity size={17} /> System status <span className="status-dot" /></a>
-          <div className="profile-row"><div className="profile-avatar">CG</div><div className="profile-meta"><strong>CodeGuard Dev</strong><span>Builder workspace</span></div><ChevronDown size={15} /></div>
+          <div className="profile-row"><div className="profile-avatar">{authUser.display_name.slice(0,1).toUpperCase()}</div><div className="profile-meta"><strong>{authUser.display_name}</strong><span>{authUser.email}</span></div><button className="profile-signout" onClick={() => { clearAuth(); setAuthUser(null); }}>Sign out</button></div>
         </div>
       </aside>
 
@@ -137,7 +158,7 @@ export default function App() {
               <span className="status-dot" />{loading ? "Loading sample…" : apiConnected ? "Sample API loaded" : "Demo mode"}
             </span>
             <button className="icon-button" aria-label="Notifications" title="Notifications"><Bell size={17} /><i /></button>
-            <div className="topbar-avatar" aria-label="Personal workspace">N</div>
+            <button className="topbar-avatar" aria-label="Sign out" title="Sign out" onClick={() => { clearAuth(); setAuthUser(null); }}>{authUser.display_name.slice(0,1).toUpperCase()}</button>
           </div>
         </header>
 
