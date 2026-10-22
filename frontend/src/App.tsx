@@ -261,7 +261,7 @@ export default function App() {
           </section>
 
           <footer className="page-footer"><span>© 2026 CodeGuard AI <span className="footer-dot">·</span> Built for developers, by developers.</span><span><span className="footer-live-dot" /> Starter environment <span className="footer-dot">·</span> <a href="https://github.com/nischalk987/CodeGuardAI" target="_blank" rel="noreferrer">GitHub repository <ArrowUpRight size={11} /></a></span></footer>
-        </div> : <div className="content-wrap"><WorkspaceView page={page === "overview" ? "projects" : page} onNavigate={setPage} /></div>}</>
+        </div> : <div className="content-wrap"><WorkspaceView page={page} onNavigate={setPage} /></div>}</>
       </main>
       {showToast && <div className="toast" role="status"><Check size={17} /><div><strong>Demo review walkthrough</strong><span>This sample review uses labelled illustrative findings and excerpts, not analysis of your code.</span></div><button onClick={() => setShowToast(false)} aria-label="Dismiss walkthrough message">×</button></div>}
       <a className="floating-terminal" href="https://github.com/nischalk987/CodeGuardAI/tree/main/backend" target="_blank" rel="noreferrer"><Terminal size={15} /> CLI docs</a>
