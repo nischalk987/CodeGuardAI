@@ -30,12 +30,11 @@ jobs:
       - name: Unit tests
         working-directory: backend
         env:
-          AI_PROVIDER: structured
           GROQ_API_KEY: ""
           HF_TOKEN: ""
           GITHUB_APP_ID: ""
           GITHUB_WEBHOOK_SECRET: ""
-        run: pytest backend/tests
+        run: pytest tests
   frontend:
     name: Frontend typecheck, tests and build
     runs-on: ubuntu-latest
