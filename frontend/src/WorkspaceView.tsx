@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { Activity, ArrowUpRight, BookOpen, Boxes, CheckCircle2, CircleAlert, Clock3, ExternalLink, FolderGit2, GitBranch, GitPullRequest, Plus, Search, Server, ShieldCheck, Terminal, Trash2 } from "lucide-react";
 
 export type WorkspacePage = "overview" | "projects" | "reviews" | "findings" | "scanner" | "integrations" | "status";
@@ -37,7 +38,7 @@ export function WorkspaceView({ page, onNavigate }: { page: Exclude<WorkspacePag
     return () => { active = false; };
   }, []);
 
-  function saveRepository(event: React.FormEvent<HTMLFormElement>) {
+  function saveRepository(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
     const normalizedUrl = url.trim().replace(/\\.git$/i, "");
