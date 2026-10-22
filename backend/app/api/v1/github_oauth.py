@@ -119,21 +119,25 @@ async def _github_get(client: httpx.AsyncClient, url: str, token: str, **kwargs)
 
 
 @router.get("/start")
-async def start_oauth(request: Request, user: UserRow = Depends(current_user)) -> Response:
+async def start_oauth(
+    request: Request,
+    response: Response,
+    user: UserRow = Depends(current_user),
+) -> dict[str, str]:
     client_id, _, redirect_uri, _ = _oauth_settings()
     state = _make_state(user.id)
     secure = request.url.scheme == "https" or os.getenv("ENVIRONMENT", "development").lower() == "production"
-    response = RedirectResponse(
-        "https://github.com/login/oauth/authorize?" + urlencode({
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "scope": "repo read:user",
-            "state": state,
-        }),
-        status_code=303,
+    response.set_cookie(
+        _STATE_COOKIE, state, httponly=True, secure=secure, samesite="lax",
+        max_age=_STATE_TTL, path="/api/v1/github/oauth",
     )
-    response.set_cookie(_STATE_COOKIE, state, httponly=True, secure=secure, samesite="lax", max_age=_STATE_TTL, path="/api/v1/github/oauth")
-    return response
+    url = "https://github.com/login/oauth/authorize?" + urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": "repo read:user",
+        "state": state,
+    })
+    return {"authorization_url": url}
 
 
 @router.get("/callback")
