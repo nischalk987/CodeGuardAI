@@ -13,7 +13,7 @@ import os
 import secrets
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -150,7 +150,10 @@ async def oauth_callback(
 ) -> Response:
     _, client_secret, redirect_uri, frontend = _oauth_settings()
     if error:
-        raise HTTPException(status_code=400, detail="GitHub authorization was denied")
+        _, _, _, frontend = _oauth_settings()
+        response = RedirectResponse(url=frontend + "/?github=error", status_code=303)
+        response.delete_cookie(_STATE_COOKIE, path="/api/v1/github/oauth")
+        return response
     if not code or not state:
         raise HTTPException(status_code=400, detail="GitHub did not return an authorization code")
     cookie_state = request.cookies.get(_STATE_COOKIE)
@@ -273,7 +276,7 @@ async def list_repository_files(
     token = _token_for_user(user, session)
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await _github_get(
-            client, f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}",
+            client, f"https://api.github.com/repos/{owner}/{repo}/git/trees/{quote(branch, safe='')}",
             token, params={"recursive": "1"},
         )
     result = response.json()
