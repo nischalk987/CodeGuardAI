@@ -25,6 +25,7 @@ class ReviewRow(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     correlation_id: Mapped[str | None] = mapped_column(String(36))
     failure_reason: Mapped[str | None] = mapped_column(Text)
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(255))
     request_hash: Mapped[str | None] = mapped_column(String(64))
     __table_args__ = (Index("uq_reviews_idempotency_key", "idempotency_key", unique=True),)
@@ -97,3 +98,16 @@ class UserRow(Base):
     display_name: Mapped[str] = mapped_column(String(80), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RepositoryRow(Base):
+    """A GitHub repository shortcut owned by one authenticated user."""
+
+    __tablename__ = "user_repositories"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    url: Mapped[str] = mapped_column(String(300), nullable=False)
+    default_branch: Mapped[str] = mapped_column(String(100), nullable=False, default="main")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("uq_user_repository_url", "owner_user_id", "url", unique=True),)

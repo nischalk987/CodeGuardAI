@@ -163,3 +163,15 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)) -> Aut
 @router.get("/me", response_model=UserResponse)
 def me(user: UserRow = Depends(current_user)) -> UserResponse:
     return UserResponse(id=user.id, email=user.email, display_name=user.display_name)
+
+
+def optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    session: Session = Depends(get_session),
+) -> UserRow | None:
+    """Allow legacy anonymous scans while associating authenticated scans with their owner."""
+    if credentials is None:
+        return None
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid authorization scheme")
+    return _user_from_token(credentials.credentials, session)

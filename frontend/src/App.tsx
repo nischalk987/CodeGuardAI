@@ -11,6 +11,7 @@ import { DismissReasonDialog } from "./DismissReasonDialog";
 import { ReviewDiff } from "./ReviewDiff";
 import { ReviewSummaryPanel } from "./ReviewSummaryPanel";
 import AuthPage, { clearAuth, readAuthToken } from "./AuthPage";
+import WorkspaceLive from "./WorkspaceLive";
 import { changedLineKeys, filterFindings, findingCounts, isReview } from "./review";
 import type { Finding, FindingDecision, FindingDisposition, FindingDispositionMap, Review, Severity } from "./types";
 
@@ -18,6 +19,7 @@ type FindingFilter = "all" | "security" | "performance" | "quality";
 const dispositionStorageKey = (reviewId: string) => `codeguard:review-dispositions:${reviewId}`;
 
 export default function App() {
+  const [workspacePage, setWorkspacePage] = useState<"overview" | "workspace">("overview");
   const [authUser, setAuthUser] = useState<{id:string;email:string;display_name:string} | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [review, setReview] = useState<Review>(demoReview);
@@ -133,7 +135,8 @@ export default function App() {
         <div className="workspace-picker"><div className="workspace-avatar">{authUser.display_name.slice(0,1).toUpperCase()}</div><div className="workspace-meta"><strong>Personal workspace</strong><span>{authUser.email}</span></div><ChevronDown size={15} /></div>
         <p className="nav-label">WORKSPACE</p>
         <nav className="side-nav" aria-label="Main navigation">
-          <a className="nav-item active" href="#overview"><LayoutDashboard size={17} /> Overview <span className="nav-pip" /></a>
+          <button className={`nav-item ${workspacePage === "overview" ? "active" : ""}`} onClick={() => setWorkspacePage("overview")}><LayoutDashboard size={17} /> Overview {workspacePage === "overview" && <span className="nav-pip" />}</button>
+          <button className={`nav-item ${workspacePage === "workspace" ? "active" : ""}`} onClick={() => setWorkspacePage("workspace")}><Boxes size={17} /> My workspace</button>
           <a className="nav-item" href="#findings"><GitPullRequest size={17} /> Code reviews <span className="nav-count">3</span></a>
           <a className="nav-item" href="#findings"><Bug size={17} /> Findings</a>
           <a className="nav-item" href="#analysis"><Terminal size={17} /> CLI scanner <span className="soon-tag">BETA</span></a>
@@ -152,7 +155,7 @@ export default function App() {
 
       <main className="main-area" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div>
+          <div className="breadcrumb">Workspace <span>/</span> <strong>{workspacePage === "overview" ? "Overview" : "My workspace"}</strong></div>
           <div className="topbar-actions">
             <span className={`connection-pill ${apiConnected ? "connected" : "demo"}`} role="status" aria-live="polite">
               <span className="status-dot" />{loading ? "Loading sample…" : apiConnected ? "Sample API loaded" : "Demo mode"}
@@ -162,7 +165,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="content-wrap">
+        {workspacePage === "workspace" ? <div className="content-wrap"><WorkspaceLive userName={authUser.display_name} /></div> : <div className="content-wrap">
           <section className="welcome-row">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> CODE INTELLIGENCE, REIMAGINED</div>
@@ -278,7 +281,7 @@ export default function App() {
           </section>
 
           <footer className="page-footer"><span>© 2026 CodeGuard AI <span className="footer-dot">·</span> Built for developers, by developers.</span><span><span className="footer-live-dot" /> Starter environment <span className="footer-dot">·</span> <a href="https://github.com/nischalk987/CodeGuardAI" target="_blank" rel="noreferrer">GitHub repository <ArrowUpRight size={11} /></a></span></footer>
-        </div>
+        </div>}
       </main>
       {showToast && <div className="toast" role="status"><Check size={17} /><div><strong>Demo review walkthrough</strong><span>This sample review uses labelled illustrative findings and excerpts, not analysis of your code.</span></div><button onClick={() => setShowToast(false)} aria-label="Dismiss walkthrough message">×</button></div>}
       <a className="floating-terminal" href="https://github.com/nischalk987/CodeGuardAI/tree/main/backend" target="_blank" rel="noreferrer"><Terminal size={15} /> CLI docs</a>

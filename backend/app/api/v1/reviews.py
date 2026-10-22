@@ -8,12 +8,15 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.reviews import ReviewNotFound, ReviewService, risk_score
 from app.domain import Finding, Review as ReviewEntity
 from app.infrastructure.persistence.database import get_session
+from app.infrastructure.persistence.models import ReviewRow, UserRow
+from app.api.v1.auth import optional_current_user
 from app.infrastructure.persistence.repository import SqlAlchemyReviewRepository
 from app.jobs.worker import execute_review
 from app.schemas import Finding as FindingResponse
@@ -95,11 +98,22 @@ def get_demo_review() -> Review:
 def list_reviews(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    user: UserRow | None = Depends(optional_current_user),
     session: Session = Depends(get_session),
 ) -> list[Review]:
-    """List persisted reviews newest first; pagination limits are enforced."""
+    """List only reviews owned by the current account (or legacy unowned reviews)."""
+    statement = select(ReviewRow.id).where(
+        ReviewRow.owner_user_id == (user.id if user else None)
+    ).order_by(ReviewRow.created_at.desc(), ReviewRow.id.desc()).offset(offset).limit(limit)
+    ids = session.scalars(statement).all()
     service = ReviewService(SqlAlchemyReviewRepository(session))
-    return [_to_response(item) for item in service.list(limit=limit, offset=offset)]
+    result = []
+    for review_id in ids:
+        try:
+            result.append(_to_response(service.get(review_id)))
+        except ReviewNotFound:
+            continue
+    return result
 
 
 @router.post("", response_model=Review, status_code=202, summary="Queue a bounded code review")
@@ -108,9 +122,10 @@ def create_review(
     request: Request,
     response: Response,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=255)] = None,
+    user: UserRow | None = Depends(optional_current_user),
     session: Session = Depends(get_session),
 ) -> Review:
-    """Queue bounded deterministic checks; source is sent only to the configured Redis broker."""
+    """Queue bounded deterministic checks; authenticated reviews are scoped to their owner."""
     _enforce_create_rate(request)
     service = ReviewService(SqlAlchemyReviewRepository(session))
     repository = SqlAlchemyReviewRepository(session)
@@ -140,6 +155,11 @@ def create_review(
             idempotency_key=idempotency_key,
             request_hash=request_hash,
         )
+        if user is not None:
+            owned_row = session.get(ReviewRow, queued_review.id)
+            if owned_row is not None:
+                owned_row.owner_user_id = user.id
+                session.commit()
     except IntegrityError:
         session.rollback()
         if idempotency_key is None:
@@ -178,8 +198,10 @@ def get_review_findings(
     status: Literal["open", "accepted", "dismissed", "fixed"] | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
+    user: UserRow | None = Depends(optional_current_user),
     session: Session = Depends(get_session),
 ) -> list[FindingResponse]:
+    _assert_review_owner(session, review_id, user)
     service = ReviewService(SqlAlchemyReviewRepository(session))
     try:
         findings = service.findings(
@@ -196,12 +218,26 @@ def get_review_findings(
 
 
 @router.get("/{review_id}", response_model=Review, summary="Retrieve a persisted review")
-def get_review(review_id: str, session: Session = Depends(get_session)) -> Review:
+def get_review(
+    review_id: str,
+    user: UserRow | None = Depends(optional_current_user),
+    session: Session = Depends(get_session),
+) -> Review:
+    _assert_review_owner(session, review_id, user)
     service = ReviewService(SqlAlchemyReviewRepository(session))
     try:
         return _to_response(service.get(review_id))
     except ReviewNotFound:
         raise HTTPException(status_code=404, detail="Review not found") from None
+
+
+def _assert_review_owner(session: Session, review_id: str, user: UserRow | None) -> None:
+    row = session.get(ReviewRow, review_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    expected_owner = user.id if user is not None else None
+    if row.owner_user_id != expected_owner:
+        raise HTTPException(status_code=404, detail="Review not found")
 
 
 def _finding_response(item: Finding) -> FindingResponse:
