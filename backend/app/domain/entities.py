@@ -212,7 +212,7 @@ class Review:
             object.__setattr__(self, "correlation_id", _required_text(self.correlation_id, "correlation_id"))
         if self.failure_reason is not None:
             object.__setattr__(self, "failure_reason", _required_text(self.failure_reason, "failure_reason"))
-        if self.ai_review_status not in {"disabled", "completed", "unavailable", "failed"}:
+        if self.ai_review_status not in {"disabled", "pending", "completed", "unavailable", "failed"}:
             raise ValueError("ai_review_status is invalid")
         if self.ai_review_status == "disabled" and self.ai_review_requested:
             raise ValueError("requested AI review cannot be disabled")
