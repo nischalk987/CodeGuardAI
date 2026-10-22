@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Activity, CircleAlert, ExternalLink, FolderGit2, GitBranch, LoaderCircle, Plus, RefreshCw, ScanLine, Trash2, Github, FileCode2, ShieldCheck, Unplug } from "lucide-react";
+import {
+  Activity, CircleAlert, ExternalLink, FolderGit2, GitBranch, LoaderCircle, Plus,
+  RefreshCw, ScanLine, Trash2, Github, FileCode2, ShieldCheck, Unplug, ChevronLeft,
+} from "lucide-react";
 import { readAuthToken } from "./AuthPage";
 
 type Repo = { id:string; name:string; url:string; default_branch:string; created_at:string };
 type GithubRepo = { id:number; full_name:string; private:boolean; html_url:string; default_branch:string; description?:string|null };
 type Branch = { name:string; commit_sha:string };
 type SourceFile = { path:string; size:number };
-type Review = { review_id:string; repository:string; branch:string; status:string; risk_score:number; created_at:string; failure_reason?:string|null };
+type Finding = { id:string; severity:"critical"|"high"|"medium"|"low"; category:string; file_path:string; line:number; title:string; message:string; explanation:string; suggested_fix:string; source:"static"|"ai"; confidence:number };
+type Review = { review_id:string; repository:string; branch:string; status:"queued"|"running"|"completed"|"failed"; risk_score:number; created_at:string; updated_at?:string; summary?:{critical:number;high:number;medium:number;low:number;total_findings:number}; findings?:Finding[]; failure_reason?:string|null; correlation_id?:string|null };
 type Tab = "projects" | "reviews" | "scan";
+const terminal=(s:Review["status"])=>s==="completed"||s==="failed";
+const message=(e:unknown,fallback:string)=>e instanceof Error?e.message:fallback;
+const encoded=(s:string)=>encodeURIComponent(s);
 
 async function api<T>(path:string, init:RequestInit = {}):Promise<T>{
   const token=readAuthToken();
@@ -18,16 +25,17 @@ async function api<T>(path:string, init:RequestInit = {}):Promise<T>{
     const detail=typeof body.detail==="string"?body.detail:typeof body.error?.message==="string"?body.error.message:null;
     throw new Error(detail||`Request failed (${response.status})`);
   }
-  if(response.status===204) return undefined as T;
+  if(response.status===204)return undefined as T;
   return response.json() as Promise<T>;
 }
-const message=(error:unknown,fallback:string)=>error instanceof Error?error.message:fallback;
-const encoded=(value:string)=>encodeURIComponent(value);
 
 export default function WorkspaceView({userName}:{userName:string}){
   const [tab,setTab]=useState<Tab>("projects");
   const [repos,setRepos]=useState<Repo[]>([]);
   const [reviews,setReviews]=useState<Review[]>([]);
+  const [selectedReviewId,setSelectedReviewId]=useState("");
+  const [selectedReview,setSelectedReview]=useState<Review|null>(null);
+  const [detailLoading,setDetailLoading]=useState(false);
   const [name,setName]=useState("");
   const [url,setUrl]=useState("");
   const [manualBranch,setManualBranch]=useState("main");
@@ -65,7 +73,41 @@ export default function WorkspaceView({userName}:{userName:string}){
       else setGithubRepos([]);
     }catch(e){setGithubConnected(false);setGithubLogin(null);setGithubRepos([]);setError(message(e,"Could not check GitHub connection."));}
   },[]);
+  const loadReview=useCallback(async(id:string)=>{
+    setSelectedReviewId(id);setDetailLoading(true);setError("");
+    try{setSelectedReview(await api<Review>(`/api/v1/reviews/${encoded(id)}`));setTab("reviews");}
+    catch(e){setSelectedReview(null);setError(message(e,"Could not load review details."));}
+    finally{setDetailLoading(false);}
+  },[]);
+  const refreshReviewDetail=useCallback(async()=>{
+    if(!selectedReviewId)return;
+    try{setSelectedReview(await api<Review>(`/api/v1/reviews/${encoded(selectedReviewId)}`));}
+    catch(e){setError(message(e,"Could not refresh review status."));}
+  },[selectedReviewId]);
   useEffect(()=>{void refresh();void refreshGithubStatus();},[refresh,refreshGithubStatus]);
+  // Poll active reviews for real queued/running/completed/failed transitions.
+  useEffect(()=>{
+    const active=reviews.filter(r=>!terminal(r.status));
+    if(active.length===0)return;
+    let cancelled=false;
+    const poll=async()=>{
+      try{
+        const updated=await Promise.all(active.map(r=>api<Review>(`/api/v1/reviews/${encoded(r.review_id)}`)));
+        if(cancelled)return;
+        setReviews(current=>current.map(item=>updated.find(next=>next.review_id===item.review_id)||item));
+        if(selectedReviewId){
+          const detail=updated.find(item=>item.review_id===selectedReviewId);
+          if(detail)setSelectedReview(detail);
+        }
+      }catch(e){if(!cancelled)setError(message(e,"Review status refresh failed."));}
+    };
+    const timer=window.setInterval(()=>void poll(),2500);
+    return()=>{cancelled=true;window.clearInterval(timer);};
+  },[reviews,selectedReviewId]);
+  useEffect(()=>{
+    if(!selectedReviewId||selectedReview||detailLoading)return;
+    void loadReview(selectedReviewId);
+  },[selectedReviewId,selectedReview,detailLoading,loadReview]);
   useEffect(()=>{
     const query=new URLSearchParams(window.location.search);
     if(query.get("github")==="connected"){setNotice("GitHub account connected securely.");setTab("projects");void refreshGithubStatus();}
@@ -76,12 +118,11 @@ export default function WorkspaceView({userName}:{userName:string}){
   async function connectGithub(){
     setError("");setNotice("");
     try{
-      const token=readAuthToken();
-      if(!token)throw new Error("Sign in to CodeGuard before connecting GitHub.");
+      const token=readAuthToken();if(!token)throw new Error("Sign in to CodeGuard before connecting GitHub.");
       const response=await fetch("/api/v1/github/oauth/start",{headers:{Authorization:`Bearer ${token}`}});
-      if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||"Could not start GitHub authorization.");}
+      if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||body.error?.message||"Could not start GitHub authorization.");}
       const result=await response.json() as {authorization_url:string};
-      if(!result.authorization_url||!result.authorization_url.startsWith("https://github.com/login/oauth/authorize?"))throw new Error("GitHub returned an invalid authorization URL.");
+      if(!result.authorization_url?.startsWith("https://github.com/login/oauth/authorize?"))throw new Error("GitHub returned an invalid authorization URL.");
       window.location.assign(result.authorization_url);
     }catch(e){setError(message(e,"Could not connect to GitHub."));}
   }
@@ -143,14 +184,18 @@ export default function WorkspaceView({userName}:{userName:string}){
   async function startScan(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setBusy(true);setError("");setNotice("");
     try{
-      const result=await api<{review_id:string;status:string}>("/api/v1/reviews",{method:"POST",body:JSON.stringify({source_code:source,file_path:filePath,repository:repository.trim()||"local",branch:scanBranch.trim()||"local"})});
-      setNotice(`Review ${result.review_id} was ${result.status}. Refresh review history to track its status.`);setTab("reviews");await refresh();
+      const result=await api<Review>("/api/v1/reviews",{method:"POST",body:JSON.stringify({source_code:source,file_path:filePath,repository:repository.trim()||"local",branch:scanBranch.trim()||"local"})});
+      const record={...result,created_at:new Date().toISOString()};
+      setReviews(current=>[record,...current.filter(item=>item.review_id!==result.review_id)]);
+      setSelectedReviewId(result.review_id);setSelectedReview(result);setSource("");setTab("reviews");
+      setNotice(`Review queued: ${result.review_id}. Status updates automatically.`);
+      void refresh();
     }catch(e){setError(message(e,"Could not start the review. Confirm the API and queue are running."));}
     finally{setBusy(false);}
   }
 
   return <section className="workspace-live">
-    <div className="workspace-live-heading"><div><span className="section-kicker">PERSONAL WORKSPACE</span><h1>Welcome, {userName}</h1><p>Connect GitHub to browse authorized repositories, select a branch and source file, then queue a real review.</p></div><button className="secondary-button" onClick={()=>void refresh()} disabled={loading}><RefreshCw size={14}/> Refresh</button></div>
+    <div className="workspace-live-heading"><div><span className="section-kicker">PERSONAL WORKSPACE</span><h1>Welcome, {userName}</h1><p>Start code reviews and follow live status, findings, severity, file paths and line numbers.</p></div><button className="secondary-button" onClick={()=>void refresh()} disabled={loading}><RefreshCw size={14}/> Refresh</button></div>
     <div className="workspace-live-tabs"><button className={tab==="projects"?"selected":""} onClick={()=>{setTab("projects");setError("");}}><FolderGit2 size={15}/> Projects</button><button className={tab==="reviews"?"selected":""} onClick={()=>{setTab("reviews");setError("");}}><Activity size={15}/> Review history</button><button className={tab==="scan"?"selected":""} onClick={()=>{setTab("scan");setError("");}}><ScanLine size={15}/> Scan code</button></div>
     {error&&<div className="workspace-live-error" role="alert"><CircleAlert size={16}/>{error}</div>}
     {notice&&<div className="workspace-live-notice" role="status">{notice}</div>}
@@ -159,12 +204,22 @@ export default function WorkspaceView({userName}:{userName:string}){
       <section className="github-connect-panel">
         <div className="github-connect-header"><div className="github-connect-icon"><Github size={21}/></div><div><span className="section-kicker">GITHUB INTEGRATION</span><h2>Connect your repositories</h2><p>Authorize GitHub to see repositories you can access, including private repositories allowed by your GitHub permissions. Tokens stay on the server.</p></div></div>
         {githubConnected?<div className="github-connected-row"><span className="github-state"><ShieldCheck size={15}/> Connected as <strong>{githubLogin||"GitHub user"}</strong></span><button className="secondary-button" onClick={()=>void refreshGithubStatus()} disabled={githubBusy}><RefreshCw size={14}/> Refresh</button><button className="workspace-live-remove" onClick={()=>void disconnectGithub()} disabled={githubBusy}><Unplug size={14}/> Disconnect</button></div>:<button className="primary-button" onClick={()=>void connectGithub()}><Github size={15}/> Connect GitHub account</button>}
-        {githubConnected&&<><div className="github-picker-grid"><label>Repository<select value={selectedRepo} onChange={e=>void selectGithubRepo(e.target.value)}><option value="">Select repository…</option>{githubRepos.map(repo=><option key={repo.id} value={repo.full_name}>{repo.full_name}{repo.private?" · private":""}</option>)}</select></label><label>Branch<select value={selectedBranch} onChange={e=>void selectBranch(e.target.value)} disabled={!selectedRepo||githubBusy}><option value="">Select branch…</option>{branches.map(item=><option key={item.name} value={item.name}>{item.name}</option>)}</select></label><label>Source file<select value={selectedFile} onChange={e=>void selectSourceFile(e.target.value)} disabled={!selectedBranch||githubBusy}><option value="">Select source file…</option>{files.map(file=><option key={file.path} value={file.path}>{file.path} ({file.size.toLocaleString()} B)</option>)}</select></label></div><div className="github-picker-footer"><span>{githubBusy?<><LoaderCircle className="auth-spinner" size={14}/> Loading GitHub data…</>:`${githubRepos.length} repositories available · ${files.length} supported source files for selected branch`}</span><span>Source file limit: 40 KB</span></div>{githubRepos.length===0&&!githubBusy&&<p className="github-empty">No accessible repositories were returned. Check the GitHub account and granted repository permissions.</p>}{selectedFile&&source&&<div className="github-source-loaded"><FileCode2 size={15}/><span>Loaded <strong>{selectedFile}</strong>. Review the source below before queueing.</span><button className="secondary-button" onClick={()=>setTab("scan")}>Continue to review <ScanLine size={14}/></button></div>}</>}
+        {githubConnected&&<><div className="github-picker-grid"><label>Repository<select value={selectedRepo} onChange={e=>void selectGithubRepo(e.target.value)}><option value="">Select repository…</option>{githubRepos.map(repo=><option key={repo.id} value={repo.full_name}>{repo.full_name}{repo.private?" · private":""}</option>)}</select></label><label>Branch<select value={selectedBranch} onChange={e=>void selectBranch(e.target.value)} disabled={!selectedRepo||githubBusy}><option value="">Select branch…</option>{branches.map(item=><option key={item.name} value={item.name}>{item.name}</option>)}</select></label><label>Source file<select value={selectedFile} onChange={e=>void selectSourceFile(e.target.value)} disabled={!selectedBranch||githubBusy}><option value="">Select source file…</option>{files.map(file=><option key={file.path} value={file.path}>{file.path} ({file.size.toLocaleString()} B)</option>)}</select></label></div><div className="github-picker-footer"><span>{githubBusy?<><LoaderCircle className="auth-spinner" size={14}/> Loading GitHub data…</>:`${githubRepos.length} repositories available · ${files.length} supported source files for selected branch`}</span><span>Source file limit: 40 KB</span></div>{githubRepos.length===0&&!githubBusy&&<p className="github-empty">No accessible repositories were returned. Check the GitHub account and granted repository permissions.</p>}</>}
       </section>
       <form className="workspace-live-form" onSubmit={addRepo}><div className="workspace-live-form-title"><Plus size={17}/><strong>Save a repository shortcut</strong></div><label>Repository name (optional)<input value={name} onChange={e=>setName(e.target.value)} maxLength={120} placeholder="team/my-service"/></label><label>GitHub repository URL<input type="url" value={url} onChange={e=>setUrl(e.target.value)} required placeholder="https://github.com/owner/repository"/></label><label>Default branch<input value={manualBranch} onChange={e=>setManualBranch(e.target.value)} maxLength={100} required/></label><button className="primary-button" type="submit" disabled={busy}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<Plus size={15}/>} Save shortcut</button></form>
       {repos.length===0?<div className="workspace-live-empty"><FolderGit2 size={28}/><h3>No saved shortcuts</h3><p>Connect GitHub above to browse repositories, or save a URL shortcut to find it quickly later.</p></div>:<div className="workspace-live-grid">{repos.map(repo=><article className="workspace-live-card" key={repo.id}><FolderGit2 size={20}/><h3>{repo.name}</h3><a href={repo.url} target="_blank" rel="noreferrer">{repo.url.replace("https://github.com/","")} <ExternalLink size={12}/></a><span><GitBranch size={13}/>{repo.default_branch}</span><small>Saved {new Date(repo.created_at).toLocaleDateString()}</small><button className="workspace-live-remove" onClick={()=>void removeRepo(repo.id)}><Trash2 size={14}/> Remove</button></article>)}</div>}
     </>}
-    {!loading&&tab==="reviews"&&<><div className="workspace-live-summary"><strong>{reviews.length}</strong><span>reviews belonging to your account</span><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Start a review</button></div>{reviews.length===0?<div className="workspace-live-empty"><Activity size={28}/><h3>No real reviews yet</h3><p>Submit a source file in Scan code. Demo findings are not included in this history.</p><button className="primary-button" onClick={()=>setTab("scan")}>Scan code</button></div>:<div className="workspace-live-review-list">{reviews.map(r=><article key={r.review_id}><div><strong>{r.repository}</strong><small>{r.branch} · {new Date(r.created_at).toLocaleString()}</small>{r.failure_reason&&<p>{r.failure_reason}</p>}</div><span className={`workspace-live-status status-${r.status}`}>{r.status}</span><span>Risk {r.risk_score}/100</span><code>{r.review_id.slice(0,12)}</code></article>)}</div>}</>}
+    {!loading&&tab==="reviews"&&<>
+      {selectedReviewId&&selectedReview?<section className="review-detail-panel">
+        <button className="secondary-button" onClick={()=>{setSelectedReviewId("");setSelectedReview(null);}}><ChevronLeft size={14}/> Back to review history</button>
+        <div className="review-detail-heading"><div><span className="section-kicker">REVIEW DETAILS</span><h2>{selectedReview.repository}</h2><p>{selectedReview.branch} · {selectedReview.review_id}</p></div><span className={`workspace-live-status status-${selectedReview.status}`}>{selectedReview.status}</span></div>
+        <div className="review-progress" role="status"><span className={selectedReview.status==="queued"?"progress-current":""}>Queued</span><i/><span className={selectedReview.status==="running"?"progress-current":""}>Running</span><i/><span className={selectedReview.status==="completed"?"progress-current":selectedReview.status==="failed"?"progress-failed":""}>{selectedReview.status==="failed"?"Failed":"Completed"}</span><button className="secondary-button" onClick={()=>void refreshReviewDetail()}><RefreshCw size={13}/> Refresh status</button></div>
+        {selectedReview.status==="failed"&&<div className="workspace-live-error"><CircleAlert size={15}/>{selectedReview.failure_reason||"The review failed. Check the queue worker and retry."}</div>}
+        <div className="review-result-summary"><div><strong>{selectedReview.risk_score}</strong><small>Risk score / 100</small></div><div><strong>{selectedReview.summary?.total_findings??selectedReview.findings?.length??0}</strong><small>Total findings</small></div>{(["critical","high","medium","low"] as const).map(level=><div key={level}><strong>{selectedReview.summary?.[level]??selectedReview.findings?.filter(f=>f.severity===level).length??0}</strong><small>{level}</small></div>)}</div>
+        <div className="review-findings-heading"><h3>Findings</h3><span>{selectedReview.status==="completed"?"Actual persisted analyzer results":selectedReview.status==="failed"?"Results unavailable":"Findings will appear when the review completes"}</span></div>
+        {selectedReview.status==="completed"&&(selectedReview.findings||[]).length===0?<div className="workspace-live-empty"><ShieldCheck size={25}/><h3>No findings detected</h3><p>The analyzer did not return any findings for the submitted file.</p></div>:<div className="review-findings-list">{(selectedReview.findings||[]).map(finding=><article key={finding.id} className="review-finding-card"><div className="review-finding-top"><span className={`finding-severity severity-${finding.severity}`}>{finding.severity}</span><span>{finding.category}</span><span className="review-finding-location"><FileCode2 size={13}/>{finding.file_path}:{finding.line}</span></div><h4>{finding.title}</h4><p>{finding.message}</p><details><summary>Explanation and suggested fix</summary><p>{finding.explanation}</p><pre>{finding.suggested_fix}</pre></details></article>)}</div>}
+      </section>:<><div className="workspace-live-summary"><strong>{reviews.length}</strong><span>reviews belonging to your account</span><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Start a review</button></div>{reviews.length===0?<div className="workspace-live-empty"><Activity size={28}/><h3>No real reviews yet</h3><p>Submit a source file in Scan code. Demo findings are not included in this history.</p><button className="primary-button" onClick={()=>setTab("scan")}>Scan code</button></div>:<div className="workspace-live-review-list">{reviews.map(r=><button type="button" key={r.review_id} className="workspace-review-row" onClick={()=>{setSelectedReview(null);void loadReview(r.review_id);}}><span><strong>{r.repository}</strong><small>{r.branch} · {new Date(r.created_at).toLocaleString()}</small><code>{r.review_id.slice(0,14)}</code></span><span className={`workspace-live-status status-${r.status}`}>{r.status}</span><span>Risk {r.risk_score}/100</span>{!terminal(r.status)&&<LoaderCircle size={15} className="auth-spinner"/>}<span className="workspace-open-review">Open details <ExternalLink size={12}/></span></button>)}</div>}</>}
+    </>}
     {!loading&&tab==="scan"&&<form className="workspace-live-scan" onSubmit={startScan}><div><span className="section-kicker">DETERMINISTIC REVIEW</span><h2>Review selected source</h2><p>Confirm the selected source before queueing. The existing API queues real deterministic checks; a running Redis/Celery worker is required.</p></div><div className="workspace-live-scan-fields"><label>Repository label<input value={repository} onChange={e=>setRepository(e.target.value)} maxLength={200}/></label><label>Branch<input value={scanBranch} onChange={e=>setScanBranch(e.target.value)} maxLength={255}/></label><label>File path<input value={filePath} onChange={e=>setFilePath(e.target.value)} required/></label></div><label>Source code<textarea value={source} onChange={e=>setSource(e.target.value)} required maxLength={40000} rows={12} placeholder={"Load a GitHub file above, or paste a source file here.\ndef example():\n    return True"}/><small>{new TextEncoder().encode(source).length.toLocaleString()} / 40,000 bytes</small></label><button className="primary-button" type="submit" disabled={busy||!source.trim()}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<ScanLine size={15}/>} Queue review</button></form>}
   </section>;
 }
