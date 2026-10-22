@@ -65,7 +65,9 @@ def _state_secret() -> bytes:
 def _make_state(user_id: str) -> str:
     payload = f"{int(time.time())}:{user_id}:{secrets.token_urlsafe(24)}"
     sig = hmac.new(_state_secret(), payload.encode(), hashlib.sha256).digest()
-    b64 = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
+    def b64(value: bytes) -> str:
+        return base64.urlsafe_b64encode(value).decode().rstrip("=")
+
     return b64(payload.encode()) + "." + b64(sig)
 
 
