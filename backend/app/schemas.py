@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 Severity = Literal["critical", "high", "medium", "low"]
 FindingSource = Literal["static", "ai"]
+AIReviewStatus = Literal["disabled", "completed", "unavailable", "failed"]
 SUPPORTED_REVIEW_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
 
 
@@ -57,10 +58,13 @@ class Review(BaseModel):
     findings: list[Finding]
     correlation_id: str | None = None
     failure_reason: str | None = None
+    ai_review_requested: bool = False
+    ai_review_status: AIReviewStatus = "disabled"
+    ai_review_message: str | None = None
 
 
 class ReviewCreateRequest(BaseModel):
-    """A bounded source snippet to review locally; source is treated as untrusted data."""
+    """A bounded source snippet; source is treated as untrusted data."""
 
     model_config = {"extra": "forbid"}
 
@@ -68,6 +72,7 @@ class ReviewCreateRequest(BaseModel):
     file_path: str = Field(default="snippet.py", min_length=1, max_length=240)
     repository: str = Field(default="local", min_length=1, max_length=200)
     branch: str = Field(default="local", min_length=1, max_length=255)
+    ai_review: bool = Field(default=False, description="Opt in to an additional hosted AI analysis.")
 
     @field_validator("source_code")
     @classmethod
