@@ -19,7 +19,6 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import current_user
@@ -123,7 +122,7 @@ async def _github_get(client: httpx.AsyncClient, url: str, token: str, **kwargs)
 async def start_oauth(request: Request, user: UserRow = Depends(current_user)) -> Response:
     client_id, _, redirect_uri, _ = _oauth_settings()
     state = _make_state(user.id)
-    secure = request.url.scheme == "https"
+    secure = request.url.scheme == "https" or os.getenv("ENVIRONMENT", "development").lower() == "production"
     response = RedirectResponse(
         "https://github.com/login/oauth/authorize?" + urlencode({
             "client_id": client_id,
@@ -198,7 +197,7 @@ async def oauth_callback(
         row.encrypted_access_token = encrypted
         row.connected_at = datetime.now(timezone.utc)
     session.commit()
-    response = RedirectResponse(url=frontend + "/workspace?github=connected", status_code=303)
+    response = RedirectResponse(url=frontend + "/?github=connected", status_code=303)
     response.delete_cookie(_STATE_COOKIE, path="/api/v1/github/oauth")
     return response
 
@@ -279,8 +278,12 @@ async def list_repository_files(
         raise HTTPException(status_code=502, detail="GitHub returned an invalid repository tree")
     files = []
     supported = (".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".c", ".h", ".cpp", ".hpp", ".cs", ".php", ".rb", ".swift", ".kt", ".sql", ".sh", ".yaml", ".yml", ".json", ".toml")
+    if result.get("truncated"):
+        raise HTTPException(status_code=413, detail="Repository tree is too large to list safely; select a smaller repository")
     for item in tree:
-        path = item.get("path") if isinstance(item, dict) else None
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
         if item.get("type") == "blob" and isinstance(path, str) and path.lower().endswith(supported):
             files.append({"path": path, "size": item.get("size", 0)})
             if len(files) >= 1000:
