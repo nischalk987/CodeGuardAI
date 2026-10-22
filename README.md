@@ -53,7 +53,7 @@ Open:
 - Interactive OpenAPI docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Labelled demo review: [http://localhost:8000/api/v1/reviews/demo](http://localhost:8000/api/v1/reviews/demo)
 
-The Compose stack supplies local-only PostgreSQL credentials and waits for service health checks. Do not reuse the sample database password outside local development. No Groq, Hugging Face, or GitHub secret is required just to open the dashboard or explore the labelled demo. Stop with `docker compose down`. Use `docker compose down -v` only when you intend to delete the local PostgreSQL volume.
+The Compose stack starts the API, Vite dashboard, PostgreSQL, Redis, and the Celery reviews worker; it waits for database/cache/API health checks before dependent services start. The worker consumes the `reviews` queue. The stack supplies local-only PostgreSQL credentials. Do not reuse the sample database password outside local development. No Groq, Hugging Face, or GitHub secret is required just to open the dashboard or explore the labelled demo. Stop with `docker compose down`. Use `docker compose down -v` only when you intend to delete the local PostgreSQL volume.
 
 If the demo endpoint is unavailable, view the frontend's local fallback sample data; the UI is explicitly not a live scan.
 
@@ -78,7 +78,7 @@ npm install
 npm run dev
 ```
 
-The dashboard can fall back to local demo data if the API is not running. Persistence and queue-backed routes require database/Redis configuration and the worker process; they are not required to see the dashboard demo.
+The dashboard can fall back to local demo data if the API is not running. The Compose stack includes PostgreSQL, Redis, and a worker; manual runs that use persistence-backed review routes require those services and a separately launched worker.
 
 ## Run a real local static scan
 
@@ -87,16 +87,16 @@ The CLI scans files/directories with deterministic checks; it does not upload so
 ```bash
 cd backend
 python -m pip install -e ".[dev]"
-python -m codeguard scan tests/fixtures/safe_sample.py
-python -m codeguard scan tests/fixtures/static_sample.py --format json
+codeguard scan tests/fixtures/safe_sample.py
+codeguard scan tests/fixtures/static_sample.py --format json
 ```
 
-Use `python -m codeguard scan --help` for analyzer, ignore-path, output-format, and severity-threshold options. Semgrep needs to be installed separately when choosing that analyzer.
+Use `codeguard scan --help` for analyzer, ignore-path, output-format, and severity-threshold options. Semgrep needs to be installed separately when choosing that analyzer.
 
 AI review is a separate, explicit opt-in and supports one source file at a time. Configure either `GROQ_API_KEY` or `HF_TOKEN` privately in the backend environment, select the provider, and run:
 
 ```bash
-python -m codeguard scan tests/fixtures/static_sample.py --ai-review
+codeguard scan tests/fixtures/static_sample.py --ai-review
 ```
 
 This command sends that selected file to the configured hosted provider. Do not use private or proprietary source unless your organization approves the provider, terms, and data handling.
@@ -104,6 +104,8 @@ This command sends that selected file to the configured hosted provider. Do not 
 ## Architecture
 
 ![CodeGuard AI architecture](docs/architecture.svg)
+
+The diagram distinguishes the working API/queue/analysis foundations from optional AI/Semgrep paths and incomplete GitHub PR review. The dashboard preview remains seeded demo data, not a live scan. See the [2–3 minute walkthrough](docs/DEMO_WALKTHROUGH.md).
 
 The system is organized as a modular monolith: one FastAPI API with explicit domain/application/adapter boundaries, plus a separately runnable queue worker for longer jobs. This is simpler to develop and test than splitting an early MVP into multiple networked microservices. Provider-specific APIs sit behind adapters; the deterministic analyzer remains useful when model credentials or network access are unavailable.
 
@@ -150,7 +152,7 @@ The dashboard demo endpoint returns **illustrative seeded findings**, not result
 1. **0:00–0:20 — Problem and status.** “CodeGuard AI combines repeatable static checks with optional advisory AI findings. This is an early MVP; the dashboard preview is labelled demo data.”
 2. **0:20–0:50 — Dashboard.** Open [localhost:5173](http://localhost:5173). Show severity counts, search/category filters, a finding's file/line context, and local triage. Clarify that previewing does not initiate a scan.
 3. **0:50–1:20 — API.** Open [localhost:8000/docs](http://localhost:8000/docs), show `/health`, then `GET /api/v1/reviews/demo`. Point out the sample is explicitly illustrative.
-4. **1:20–1:55 — CLI.** Scan `backend/tests/fixtures/static_sample.py` with `python -m codeguard scan ... --format json`. Explain that deterministic analysis runs locally and does not upload code by default.
+4. **1:20–1:55 — CLI.** Scan `backend/tests/fixtures/static_sample.py` with `codeguard scan ... --format json`. Explain that deterministic analysis runs locally and does not upload code by default.
 5. **1:55–2:25 — Engineering quality.** Show GitHub Actions checks and tests for malicious prompt text, provider errors, input bounds and untrusted suggested fixes.
 6. **2:25–2:50 — Trade-offs and roadmap.** Explain deterministic versus AI findings, hosted-provider privacy considerations, and that full PR-diff review/inline comments and live dashboard scanning are unfinished.
 
@@ -181,7 +183,7 @@ Canonical placeholder configuration: [`.env.example`](.env.example) and [`backen
 - Finish GitHub PR diff retrieval, bounded analysis orchestration, and review summary delivery.
 - Add verified end-to-end integration tests and a safe disposable deployment.
 - Improve language/rule coverage, calibrate confidence carefully, and add richer diff-context handling.
-- Capture and maintain a current screenshot of the real dashboard demo.
+- Capture and maintain a current browser screenshot of the real dashboard demo. The architecture diagram is provided now; a runtime screenshot is not included because it must be captured from a running app, not simulated.
 
 ## Known limitations
 
