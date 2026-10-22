@@ -54,7 +54,7 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: (user: 
         <span className="section-kicker">{mode === "login" ? "WELCOME BACK" : "GET STARTED"}</span>
         <h2>{mode === "login" ? "Sign in to your account" : "Create your account"}</h2>
         <p className="auth-subtitle">{mode === "login" ? "Enter your credentials to continue to your workspace." : "Set up your personal CodeGuardAI workspace."}</p>
-        <div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} type="button" onClick={() => {setMode("login");setError("");}}>Sign in</button><button className={mode === "register" ? "selected" : ""} type="button onClick={() => {setMode("register");setError("");}}>Sign up</button></div>
+        <div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} type="button" onClick={() => {setMode("login");setError("");}}>Sign in</button><button className={mode === "register" ? "selected" : ""} type="button" onClick={() => {setMode("register");setError("");}}>Sign up</button></div>
         <form onSubmit={submit} className="auth-form">
           {mode === "register" && <label>Full name<input value={name} onChange={e=>setName(e.target.value)} autoComplete="name" placeholder="Your name" minLength={1} maxLength={80} required/></label>}
           <label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" maxLength={254} required/></label>
