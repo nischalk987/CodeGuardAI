@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import {
   Activity, ArrowUpRight, Bell, BookOpenCheck, Bot, Bug, Check, ChevronDown,
   CircleAlert, Clock3, Code2, FileCode2, Filter, GitPullRequest, LayoutDashboard,
-  Search, ShieldCheck, Sparkles, Terminal, Zap,
+  Search, ShieldCheck, Sparkles, Terminal, Zap, ArrowRight, Boxes, Database,
+  GitBranch, Server, Workflow, CircleCheck, CircleDashed,
 } from "lucide-react";
 import { demoDiffFiles, demoReview } from "./demo";
 import { DismissReasonDialog } from "./DismissReasonDialog";
@@ -217,7 +218,40 @@ export default function App() {
             </div>
           </section>
 
-          <section className="bottom-grid" id="architecture">
+          <section className="architecture-section" id="architecture" aria-labelledby="architecture-title">
+            <div className="architecture-heading">
+              <div><span className="section-kicker">SYSTEM OVERVIEW</span><h2 id="architecture-title">How CodeGuardAI works</h2><p>From source code to actionable findings, with clear boundaries between deterministic checks and advisory AI.</p></div>
+              <a className="architecture-doc-link" href="https://github.com/nischalk987/CodeGuardAI/blob/main/docs/architecture.svg" target="_blank" rel="noreferrer">Architecture notes <ArrowUpRight size={13} /></a>
+            </div>
+            <div className="architecture-legend" aria-label="Architecture status legend">
+              <span><i className="legend-dot legend-implemented" /> Present in repository</span>
+              <span><i className="legend-dot legend-optional" /> Optional / configuration-dependent</span>
+              <span><i className="legend-dot legend-limited" /> Integration has limitations</span>
+            </div>
+            <div className="architecture-flow" aria-label="CodeGuardAI review flow">
+              <article className="architecture-node node-input"><div className="architecture-node-icon"><GitBranch size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> INPUT</span><h3>Source input</h3><p>Code or review target supplied for analysis.</p></article>
+              <div className="architecture-connector" aria-hidden="true"><ArrowRight /><span>request</span></div>
+              <article className="architecture-node node-api"><div className="architecture-node-icon"><Server size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> BACKEND</span><h3>FastAPI</h3><p>Validate requests and coordinate review processing.</p></article>
+              <div className="architecture-connector" aria-hidden="true"><ArrowRight /><span>dispatch</span></div>
+              <article className="architecture-node node-analysis"><div className="architecture-node-icon"><ShieldCheck size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> ANALYSIS</span><h3>Code checks</h3><p>Deterministic rules; optional Semgrep where configured.</p></article>
+              <div className="architecture-connector" aria-hidden="true"><ArrowRight /><span>enrich</span></div>
+              <article className="architecture-node node-ai"><div className="architecture-node-icon"><Bot size={18} /></div><span className="architecture-status status-optional"><CircleDashed size={11} /> OPTIONAL</span><h3>AI reviewer</h3><p>Groq or compatible Hugging Face inference when configured.</p></article>
+            </div>
+            <div className="architecture-return" aria-hidden="true"><span /><ArrowRight /><span className="return-label">validated findings and review summary</span><ArrowRight /><span /></div>
+            <div className="architecture-flow architecture-flow-secondary">
+              <article className="architecture-node node-queue"><div className="architecture-node-icon"><Workflow size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> JOBS</span><h3>Redis + Celery</h3><p>Background review queue and worker processing.</p></article>
+              <div className="architecture-connector" aria-hidden="true"><ArrowRight /><span>persist</span></div>
+              <article className="architecture-node node-db"><div className="architecture-node-icon"><Database size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> STORAGE</span><h3>PostgreSQL</h3><p>Review state and findings available to the API.</p></article>
+              <div className="architecture-connector" aria-hidden="true"><ArrowRight /><span>render</span></div>
+              <article className="architecture-node node-ui"><div className="architecture-node-icon"><Boxes size={18} /></div><span className="architecture-status status-present"><CircleCheck size={11} /> FRONTEND</span><h3>Review workspace</h3><p>Findings, evidence, severity and remediation guidance.</p></article>
+            </div>
+            <div className="architecture-integrations">
+              <div className="integration-copy"><div className="architecture-node-icon"><GitPullRequest size={18} /></div><div><span className="architecture-status status-limited">INTEGRATION LIMITATION</span><h3>GitHub pull requests</h3><p>GitHub connectivity exists, but complete pull-request diff review and inline-comment workflows must be verified before being presented as fully supported.</p></div></div>
+              <div className="integration-copy"><div className="architecture-node-icon"><Terminal size={18} /></div><div><span className="architecture-status status-present">LOCAL TOOLING</span><h3>CodeGuard CLI</h3><p>Run deterministic checks locally and emit machine-readable results.</p><a href="https://github.com/nischalk987/CodeGuardAI/tree/main/backend" target="_blank" rel="noreferrer">CLI documentation <ArrowUpRight size={12} /></a></div></div>
+            </div>
+            <p className="architecture-footnote"><CircleAlert size={13} /> AI findings are advisory hypotheses, not proof of a vulnerability. Actual integrations depend on configuration and current backend capabilities.</p>
+          </section>
+          <section className="bottom-grid">
             <div className="bottom-card"><div className="bottom-icon ai-icon"><Bot size={19} /></div><div className="bottom-copy"><span className="section-kicker">ADVISORY AI</span><h3>Suggestions stay separate</h3><p>AI-generated findings are labelled as hypotheses. Confirm the cited code and evidence before acting.</p><a href="https://github.com/nischalk987/CodeGuardAI/issues/4" target="_blank" rel="noreferrer">Reviewer implementation <ArrowUpRight size={13} /></a></div><div className="bottom-spark"><Sparkles size={40} /></div></div>
             <div className="bottom-card"><div className="bottom-icon cli-icon"><Terminal size={19} /></div><div className="bottom-copy"><span className="section-kicker">DEVELOPER TOOLING</span><h3>Scan locally from your terminal</h3><p>The CodeGuard CLI runs deterministic checks locally and supports machine-readable output.</p><a href="https://github.com/nischalk987/CodeGuardAI/tree/main/backend" target="_blank" rel="noreferrer">Backend CLI documentation <ArrowUpRight size={13} /></a></div><div className="terminal-mini"><span>$ codeguard scan .</span><span className="terminal-ok">✓ local scan</span><span className="terminal-cursor">_</span></div></div>
           </section>
