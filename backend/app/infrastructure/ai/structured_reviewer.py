@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -28,12 +29,20 @@ class StructuredOutputAIReviewer(ABC):
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._provider_semaphore: asyncio.Semaphore | None = None
 
     async def review(self, *, file_path: str, source_code: str) -> list[Finding]:
         safe_path = _validate_file_path(file_path)
         _validate_source(source_code, self._settings.ai_review_max_input_bytes)
         prompt_data = json.dumps({"file_path": safe_path, "source_code": source_code}, ensure_ascii=True)
-        completion = await self._request_completion(prompt_data)
+        # Limit in-flight provider calls on this reviewer instance. Provider adapters own
+        # the complete bounded retry sequence, so retries share the same concurrency slot.
+        if self._provider_semaphore is None:
+            self._provider_semaphore = asyncio.Semaphore(
+                self._settings.ai_review_max_concurrency
+            )
+        async with self._provider_semaphore:
+            completion = await self._request_completion(prompt_data)
         payload = _response_content(completion)
         try:
             parsed = ModelReviewResponse.model_validate_json(payload, strict=True)
