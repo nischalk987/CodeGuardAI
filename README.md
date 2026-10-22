@@ -186,3 +186,44 @@ CodeGuard AI is a developer-assistance tool, not a guarantee of correctness or s
 ---
 
 **Catch bugs early. Review smarter. Ship better code.**
+
+
+## Reproducible local environment (Docker Compose)
+
+Requirements: Docker Desktop (or Docker Engine with the Compose plugin).
+
+1. Clone the repository and enter its directory.
+2. Copy `.env.example` to `.env` only if you need optional provider credentials. Leave optional values blank for a local demo; never commit real credentials.
+3. Start the stack:
+
+   ```bash
+   docker compose up --build
+   ```
+
+4. Open the frontend at http://localhost:5173, the API at http://localhost:8000, and API docs at http://localhost:8000/docs.
+5. Check API health at http://localhost:8000/health. Docker Compose waits for PostgreSQL and Redis health checks before starting the API, and for API health before starting the web container.
+6. Stop the stack with `docker compose down`. Persistent PostgreSQL data is stored in the named `postgres_data` volume; remove it only when you intentionally want to delete local database data (`docker compose down -v`).
+
+The Compose stack supplies local-only PostgreSQL credentials for development. Change them before using any non-local environment. Groq/Hugging Face and GitHub integration credentials are optional and should be configured through untracked environment files or a secret manager. Unit tests and the deterministic demo must not depend on live provider credentials.
+
+## Automated quality and security checks
+
+GitHub Actions runs backend Ruff linting and pytest, frontend TypeScript/build and Vitest checks, Compose configuration validation, Python dependency auditing with `pip-audit`, frontend dependency auditing with `npm audit`, and Gitleaks secret scanning. Checks run for pushes and pull requests targeting `main`; dependency and secret scans also run on a weekly schedule.
+
+Run the checks locally:
+
+```bash
+# Backend (from repository root)
+python -m pip install -e "backend[dev]"
+ruff check backend/app backend/tests
+pytest backend/tests
+
+# Frontend
+cd frontend
+npm install
+npm run build
+npm test
+npm audit --audit-level=high
+```
+
+Dependency audit failures should be reviewed rather than ignored; update affected dependencies and verify compatibility before merging.
