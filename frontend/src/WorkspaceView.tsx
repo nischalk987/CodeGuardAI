@@ -41,7 +41,7 @@ export function WorkspaceView({ page, onNavigate }: { page: Exclude<WorkspacePag
   function saveRepository(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-    const normalizedUrl = url.trim().replace(/\\.git$/i, "");
+    const normalizedUrl = url.trim().replace(/\.git$/i, "");
     if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(normalizedUrl)) {
       setFormError("Enter a valid public GitHub repository URL, for example https://github.com/owner/repository.");
       return;
