@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.github import router as github_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.workspace import router as workspace_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.request_limits import ReviewBodyLimitMiddleware
@@ -106,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(reviews_router, prefix="/api/v1")
     application.include_router(github_router, prefix="/api/v1")
     application.include_router(auth_router, prefix="/api/v1")
+    application.include_router(workspace_router, prefix="/api/v1")
 
     @application.get("/health", tags=["system"], summary="Health check")
     def health_check() -> dict[str, str]:
