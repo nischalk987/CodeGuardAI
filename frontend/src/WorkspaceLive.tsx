@@ -15,7 +15,8 @@ async function api<T>(path:string, init:RequestInit = {}):Promise<T>{
   const response=await fetch(path,{...init,headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,...(init.headers||{})}});
   if(!response.ok){
     const body=await response.json().catch(()=>({}));
-    throw new Error(typeof body.detail==="string"?body.detail:`Request failed (${response.status})`);
+    const detail=typeof body.detail==="string"?body.detail:typeof body.error?.message==="string"?body.error.message:null;
+    throw new Error(detail||`Request failed (${response.status})`);
   }
   if(response.status===204) return undefined as T;
   return response.json() as Promise<T>;
