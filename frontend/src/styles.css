@@ -186,3 +186,48 @@
 .github-source-loaded strong{color:#e1f5d8;overflow-wrap:anywhere}
 .github-source-loaded .secondary-button{white-space:nowrap}
 @media(max-width:760px){.github-picker-grid{grid-template-columns:1fr}.github-connect-panel{padding:15px}.github-connected-row{align-items:flex-start}.github-state{width:100%}.github-source-loaded .secondary-button{width:100%;justify-content:center}}
+
+
+/* Issue #35: live review lifecycle and findings */
+.workspace-review-row{width:100%;display:grid;grid-template-columns:minmax(0,1.4fr) auto auto auto auto;align-items:center;gap:15px;padding:15px;border:1px solid #2a3340;border-radius:9px;background:#121720;text-align:left;cursor:pointer;font-size:10px;color:#aeb8c6;transition:border-color .15s,background .15s}
+.workspace-review-row:hover{border-color:#516b45;background:#151e20}
+.workspace-review-row>span:first-child{min-width:0}
+.workspace-review-row strong,.workspace-review-row small,.workspace-review-row code{display:block}
+.workspace-review-row strong{color:#e7edf4;font-size:12px;overflow-wrap:anywhere}
+.workspace-review-row small{margin-top:5px;color:#8794a6}
+.workspace-review-row code{margin-top:5px;color:#748399;font-size:9px}
+.workspace-review-row .workspace-live-status{white-space:nowrap}
+.workspace-open-review{display:flex;align-items:center;gap:5px;color:#b9f56a;white-space:nowrap}
+.review-detail-panel{display:grid;gap:17px;padding:20px;border:1px solid #2a3340;border-radius:12px;background:#121720}
+.review-detail-heading{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}
+.review-detail-heading h2{font:750 21px Manrope,sans-serif;margin:7px 0;color:#edf3f7;overflow-wrap:anywhere}
+.review-detail-heading p{font:10px 'DM Mono',monospace;line-height:1.7;color:#8391a5;overflow-wrap:anywhere}
+.review-progress{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px;border:1px solid #28323f;border-radius:8px;color:#7f8da0;font-size:10px}
+.review-progress>span{padding:5px 8px;border-radius:5px;background:#1a202b}
+.review-progress>span.progress-current{background:#20311c;color:#c6fa99}
+.review-progress>span.progress-failed{background:#361c23;color:#ffaaaa}
+.review-progress>i{width:18px;height:1px;background:#475163}
+.review-progress>.secondary-button{margin-left:auto}
+.review-result-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.review-result-summary>div{min-width:0;border:1px solid #29323e;border-radius:8px;background:#0e131b;padding:12px 10px}
+.review-result-summary strong{display:block;font:800 19px Manrope,sans-serif;color:#eef2f7}
+.review-result-summary small{display:block;margin-top:5px;color:#8995a5;font-size:9px;text-transform:capitalize}
+.review-findings-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.review-findings-heading h3{font:700 15px Manrope,sans-serif;margin:0;color:#e9eef6}
+.review-findings-heading span{font-size:9px;color:#7c899c}
+.review-findings-list{display:grid;gap:10px}
+.review-finding-card{border:1px solid #2a3340;border-radius:9px;padding:14px;background:#0e131b}
+.review-finding-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:#8593a6;font-size:9px}
+.finding-severity{padding:4px 7px;border-radius:4px;text-transform:uppercase;font:600 9px 'DM Mono',monospace}
+.severity-critical{background:#4a202a;color:#ff9fa8}
+.severity-high{background:#43251f;color:#ffbd8b}
+.severity-medium{background:#3b341c;color:#f0d27c}
+.severity-low{background:#1e3034;color:#9dd9e5}
+.review-finding-location{display:flex;align-items:center;gap:5px;margin-left:auto;font-family:'DM Mono',monospace;color:#b8c5d5;overflow-wrap:anywhere}
+.review-finding-card h4{font-size:12px;color:#edf2f7;margin:10px 0 6px}
+.review-finding-card p{font-size:10px;line-height:1.7;color:#a3afbf;overflow-wrap:anywhere}
+.review-finding-card details{margin-top:10px;border-top:1px solid #232c38;padding-top:9px;color:#a6b4c4;font-size:10px}
+.review-finding-card summary{cursor:pointer;color:#b8e991}
+.review-finding-card pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#d5e3cc;background:#17211a;padding:10px;border-radius:6px;font-size:10px}
+@media(max-width:850px){.workspace-review-row{grid-template-columns:minmax(0,1fr) auto}.workspace-open-review{grid-column:1/-1}.review-result-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.review-progress>.secondary-button{margin-left:0}}
+@media(max-width:540px){.review-detail-panel{padding:13px}.review-detail-heading{display:grid}.review-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-finding-location{width:100%;margin-left:0}.workspace-review-row{gap:9px;padding:12px}}
