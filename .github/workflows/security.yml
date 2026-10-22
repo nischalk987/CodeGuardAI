@@ -24,7 +24,7 @@ jobs:
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
       - name: Audit backend dependencies
-        run: pip-audit --project backend
+        run: pip-audit backend
   frontend-dependencies:
     name: Frontend dependency audit
     runs-on: ubuntu-latest
