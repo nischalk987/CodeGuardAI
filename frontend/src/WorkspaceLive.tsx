@@ -75,10 +75,13 @@ export default function WorkspaceView({userName}:{userName:string}){
   async function connectGithub(){
     setError("");setNotice("");
     try{
-      const token=readAuthToken();if(!token)throw new Error("Sign in to CodeGuard before connecting GitHub.");
+      const token=readAuthToken();
+      if(!token)throw new Error("Sign in to CodeGuard before connecting GitHub.");
       const response=await fetch("/api/v1/github/oauth/start",{headers:{Authorization:`Bearer ${token}`}});
       if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||"Could not start GitHub authorization.");}
-      window.location.assign(response.url);
+      const result=await response.json() as {authorization_url:string};
+      if(!result.authorization_url||!result.authorization_url.startsWith("https://github.com/login/oauth/authorize?"))throw new Error("GitHub returned an invalid authorization URL.");
+      window.location.assign(result.authorization_url);
     }catch(e){setError(message(e,"Could not connect to GitHub."));}
   }
   async function disconnectGithub(){
