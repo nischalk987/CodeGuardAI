@@ -180,6 +180,9 @@ class Review:
     completed_at: datetime | None = None
     correlation_id: str | None = None
     failure_reason: str | None = None
+    ai_review_requested: bool = False
+    ai_review_status: str = "disabled"
+    ai_review_message: str | None = None
     summary: ReviewSummary = field(default_factory=ReviewSummary)
     findings: tuple[Finding, ...] = ()
 
@@ -209,6 +212,12 @@ class Review:
             object.__setattr__(self, "correlation_id", _required_text(self.correlation_id, "correlation_id"))
         if self.failure_reason is not None:
             object.__setattr__(self, "failure_reason", _required_text(self.failure_reason, "failure_reason"))
+        if self.ai_review_status not in {"disabled", "completed", "unavailable", "failed"}:
+            raise ValueError("ai_review_status is invalid")
+        if self.ai_review_status == "disabled" and self.ai_review_requested:
+            raise ValueError("requested AI review cannot be disabled")
+        if self.ai_review_message is not None:
+            object.__setattr__(self, "ai_review_message", _required_text(self.ai_review_message, "ai_review_message"))
         if self.status is ReviewStatus.FAILED and not self.failure_reason:
             raise ValueError("failed reviews require a safe failure_reason")
         if self.status is not ReviewStatus.FAILED and self.failure_reason is not None:
