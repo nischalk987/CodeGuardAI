@@ -34,6 +34,21 @@ The goal is not to replace human review or promise perfect vulnerability detecti
 | Dashboard submits real code for scanning | **Planned / incomplete** | Current dashboard preview uses demo findings |
 | Automatically apply AI fixes | **Not supported by design** | Suggested fixes are proposals for human review |
 
+## GitHub repository integration
+
+Sign in to CodeGuard AI, open **My workspace → Projects**, then choose **Connect GitHub account**. GitHub OAuth redirects back to the configured frontend after authorization. The workspace shows repositories visible to that GitHub account (including private repositories GitHub grants access to), then lets you select a branch and a supported source file. The selected file is capped at 40 KB and is previewed in the scan form before you explicitly queue a review. The resulting review uses the existing deterministic review API; a queue worker must be running for asynchronous processing.
+
+Configure these backend-only variables in `backend/.env` (or the backend deployment secret manager):
+
+- `GITHUB_OAUTH_CLIENT_ID`: OAuth App client ID.
+- `GITHUB_OAUTH_CLIENT_SECRET`: OAuth App client secret; never put it in frontend variables.
+- `GITHUB_OAUTH_REDIRECT_URI`: exact callback URL, normally `http://localhost:8000/api/v1/github/oauth/callback` for local development.
+- `GITHUB_TOKEN_ENCRYPTION_KEY`: Fernet key used to encrypt GitHub tokens at rest. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+
+Set `FRONTEND_ORIGIN` to the actual dashboard origin (Compose defaults to `http://localhost:5173`) and make sure the OAuth App callback URL matches `GITHUB_OAUTH_REDIRECT_URI`. The token is encrypted in the backend database, scoped to the signed-in CodeGuard account, and never returned to frontend JavaScript. Disconnecting GitHub deletes the stored connection. Tokens and source files are not intentionally logged. The backend requests `repo` scope because private repository contents require an explicit user grant; users should review the access they approve in GitHub.
+
+New tables require the regular Alembic migration step; Docker Compose applies migrations on API startup. Deployments must configure the OAuth client secret and encryption key privately before the Connect button can work.
+
 ## Account authentication
 
 The API exposes `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`. The frontend shows sign-in/sign-up first and checks the current account on reload. Passwords are hashed with scrypt; the API never returns password hashes.
@@ -187,7 +202,7 @@ Keep real values in untracked environment files or a secret manager. Do not put 
 | `HF_TIMEOUT_SECONDS`, `HF_MAX_RETRIES` | Hugging Face request limits | Defaults available |
 | `AI_REVIEW_MAX_INPUT_BYTES`, `AI_REVIEW_MAX_CONCURRENCY` | AI input and in-flight call bounds | Defaults available |
 | `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY_PATH`, `GITHUB_WEBHOOK_SECRET` | GitHub App webhook/integration settings | Optional; integration is incomplete |
-| `GITHUB_API_BASE_URL`, `GITHUB_MAX_DIFF_BYTES`, `GITHUB_MAX_FILES` | GitHub API endpoint and intake bounds | Defaults available |
+| `GITHUB_API_BASE_URL`, `GITHUB_MAX_DIFF_BYTES`, `GITHUB_MAX_FILES` | GitHub App API endpoint and webhook intake bounds | Defaults available |\n| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URI` | User GitHub OAuth | Required for repository browsing |\n| `GITHUB_TOKEN_ENCRYPTION_KEY` | Encrypt GitHub tokens at rest | Required for OAuth integration |
 
 Canonical placeholder configuration: [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.example).
 
@@ -207,7 +222,7 @@ Canonical placeholder configuration: [`.env.example`](.env.example) and [`backen
 - Secret-pattern redaction can miss unrecognized credentials.
 - Semgrep requires a separate local installation.
 - Database/queue-backed features need correctly configured PostgreSQL, Redis and worker processes.
-- GitHub webhook intake is present but complete PR review and inline annotations remain unfinished.
+- GitHub OAuth browser flow supports repository/branch/file selection; end-to-end PR diff review and inline annotations remain unfinished.
 - No suggested fix is applied automatically.
 
 ## Responsible use
