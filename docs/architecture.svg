@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+<title id="title">CodeGuard AI architecture</title>
+<desc id="desc">React frontend talks to FastAPI, which stores review state in PostgreSQL and queues work in Redis for a Celery worker. The worker uses deterministic built-in or optional Semgrep analysis and an optional Groq or Hugging Face AI reviewer. A GitHub webhook connects to the API; full PR diff review is incomplete.</desc>
+<defs>
+  <style>
+    .bg{fill:#f8fafc}.box{fill:#fff;stroke:#334155;stroke-width:2;rx:14}.external{fill:#fff7ed;stroke:#c2410c;stroke-width:2;rx:14}.planned{fill:#f1f5f9;stroke:#64748b;stroke-width:2;stroke-dasharray:7 5;rx:14}.title{font:700 22px Arial,sans-serif;fill:#0f172a}.label{font:16px Arial,sans-serif;fill:#334155}.note{font:14px Arial,sans-serif;fill:#475569}.edge{stroke:#475569;stroke-width:2.4;fill:none}.edgeopt{stroke:#c2410c;stroke-width:2.2;fill:none;stroke-dasharray:7 5}
+  </style>
+  <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#475569"/></marker>
+  <marker id="arrowopt" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#c2410c"/></marker>
+</defs>
+<rect class="bg" width="1200" height="720"/>
+<text x="56" y="54" class="title" style="font-size:30px">CodeGuard AI — Modular Monolith + Worker</text>
+<text x="56" y="82" class="note">Solid lines: implemented pathways/foundation · Dashed orange: optional or incomplete integration</text>
+<rect x="60" y="130" width="250" height="108" class="box"/>
+<text x="185" y="165" class="title" text-anchor="middle">React + TypeScript</text>
+<text x="185" y="194" class="label" text-anchor="middle">Vite dashboard</text>
+<text x="185" y="218" class="note" text-anchor="middle">Sample/demo findings</text>
+<rect x="400" y="130" width="270" height="108" class="box"/>
+<text x="535" y="166" class="title" text-anchor="middle">FastAPI API</text>
+<text x="535" y="194" class="label" text-anchor="middle">Routes · validation · limits</text>
+<text x="535" y="218" class="note" text-anchor="middle">REST + OpenAPI docs</text>
+<path class="edge" marker-end="url(#arrow)" d="M310 184 H392"/>
+<text x="350" y="168" class="note" text-anchor="middle">HTTP</text>
+<rect x="790" y="112" width="300" height="92" class="box"/>
+<text x="940" y="148" class="title" text-anchor="middle">PostgreSQL</text>
+<text x="940" y="177" class="label" text-anchor="middle">SQLAlchemy + migrations</text>
+<path class="edge" marker-end="url(#arrow)" d="M670 155 H782"/>
+<text x="724" y="139" class="note" text-anchor="middle">persist</text>
+<path class="edge" marker-end="url(#arrow)" d="M790 185 H680"/>
+<rect x="390" y="310" width="290" height="90" class="box"/>
+<text x="535" y="346" class="title" text-anchor="middle">Redis Queue</text>
+<text x="535" y="375" class="label" text-anchor="middle">Celery broker/backend</text>
+<path class="edge" marker-end="url(#arrow)" d="M535 238 V302"/>
+<text x="551" y="276" class="note">enqueue</text>
+<rect x="390" y="455" width="290" height="100" class="box"/>
+<text x="535" y="492" class="title" text-anchor="middle">Review Worker</text>
+<text x="535" y="521" class="label" text-anchor="middle">Celery task · bounded retries</text>
+<path class="edge" marker-end="url(#arrow)" d="M535 400 V447"/>
+<text x="551" y="430" class="note">consume</text>
+<rect x="60" y="455" width="250" height="100" class="box"/>
+<text x="185" y="491" class="title" text-anchor="middle">Built-in Analyzer</text>
+<text x="185" y="521" class="label" text-anchor="middle">Deterministic rules</text>
+<path class="edge" marker-end="url(#arrow)" d="M390 500 H318"/>
+<rect x="60" y="590" width="250" height="74" class="external"/>
+<text x="185" y="620" class="title" text-anchor="middle">Semgrep (optional)</text>
+<text x="185" y="645" class="note" text-anchor="middle">Install/configure locally</text>
+<path class="edgeopt" marker-end="url(#arrowopt)" d="M185 555 V582"/>
+<rect x="790" y="455" width="300" height="100" class="external"/>
+<text x="940" y="491" class="title" text-anchor="middle">AI Reviewer Adapter</text>
+<text x="940" y="521" class="label" text-anchor="middle">Schema-validated hypotheses</text>
+<path class="edgeopt" marker-end="url(#arrowopt)" d="M680 500 H782"/>
+<rect x="790" y="590" width="140" height="74" class="external"/>
+<text x="860" y="620" class="title" text-anchor="middle" style="font-size:17px">Groq</text>
+<text x="860" y="645" class="note" text-anchor="middle">opt-in hosted AI</text>
+<rect x="950" y="590" width="140" height="74" class="external"/>
+<text x="1020" y="620" class="title" text-anchor="middle" style="font-size:17px">Hugging Face</text>
+<text x="1020" y="645" class="note" text-anchor="middle">optional provider</text>
+<path class="edgeopt" marker-end="url(#arrowopt)" d="M860 590 V565 H900 V555"/>
+<path class="edgeopt" marker-end="url(#arrowopt)" d="M1020 590 V565 H980 V555"/>
+<rect x="790" y="270" width="300" height="100" class="planned"/>
+<text x="940" y="306" class="title" text-anchor="middle">GitHub Integration</text>
+<text x="940" y="334" class="label" text-anchor="middle">Webhook signature + dedupe</text>
+<text x="940" y="355" class="note" text-anchor="middle">Full PR review incomplete</text>
+<path class="edgeopt" marker-end="url(#arrowopt)" d="M790 320 H706 V215 H680"/>
+<text x="56" y="697" class="note">AI output is advisory. Suggested fixes are never executed automatically. Dashboard uses demo data; live UI scanning is planned.</text>
+</svg>
