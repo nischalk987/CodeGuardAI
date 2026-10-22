@@ -17,7 +17,7 @@ From the repo root, run:
 ```bash
 cd backend
 python -m pip install -e ".[dev]"
-python -m codeguard scan tests/fixtures/static_sample.py --format json
+codeguard scan tests/fixtures/static_sample.py --format json
 ```
 
 Explain that deterministic checks run locally; source is not uploaded unless the explicit single-file `--ai-review` option is used.
