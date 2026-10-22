@@ -312,7 +312,7 @@ async def get_repository_file(
     token = _token_for_user(user, session)
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await _github_get(
-            client, f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+            client, f"https://api.github.com/repos/{owner}/{repo}/contents/{quote(path, safe='/')}",
             token, params={"ref": ref},
         )
     payload = response.json()
