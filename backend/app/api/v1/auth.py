@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import time
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -133,6 +134,7 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)) 
         email=payload.email,
         display_name=payload.display_name,
         password_hash=_password_hash(payload.password),
+        created_at=datetime.now(timezone.utc),
     )
     session.add(user)
     try:
