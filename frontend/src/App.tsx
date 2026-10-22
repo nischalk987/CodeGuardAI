@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { WorkspaceView } from "./WorkspaceView";
+import type { WorkspacePage } from "./WorkspaceView";
 import {
   Activity, ArrowUpRight, Bell, BookOpenCheck, Bot, Bug, Check, ChevronDown,
   CircleAlert, Clock3, Code2, FileCode2, Filter, GitPullRequest, LayoutDashboard,
@@ -17,6 +19,7 @@ type FindingFilter = "all" | "security" | "performance" | "quality";
 const dispositionStorageKey = (reviewId: string) => `codeguard:review-dispositions:${reviewId}`;
 
 export default function App() {
+  const [page, setPage] = useState<WorkspacePage>("overview");
   const [review, setReview] = useState<Review>(demoReview);
   const [apiConnected, setApiConnected] = useState(false);
   const [apiError, setApiError] = useState("");
@@ -109,29 +112,30 @@ export default function App() {
           <span className="brand-mark"><ShieldCheck size={22} /></span>
           <span className="brand-copy">codeguard<span>AI</span><small>CODE INTELLIGENCE</small></span>
         </a>
-        <div className="workspace-picker"><div className="workspace-avatar">N</div><div className="workspace-meta"><strong>Personal workspace</strong><span>Developer plan</span></div><ChevronDown size={15} /></div>
+        <button className="workspace-picker workspace-picker-button" onClick={() => setPage("projects")}><div className="workspace-avatar">N</div><div className="workspace-meta"><strong>Personal workspace</strong><span>Local workspace</span></div><ChevronDown size={15} /></button>
         <p className="nav-label">WORKSPACE</p>
         <nav className="side-nav" aria-label="Main navigation">
-          <a className="nav-item active" href="#overview"><LayoutDashboard size={17} /> Overview <span className="nav-pip" /></a>
-          <a className="nav-item" href="#findings"><GitPullRequest size={17} /> Code reviews <span className="nav-count">3</span></a>
-          <a className="nav-item" href="#findings"><Bug size={17} /> Findings</a>
-          <a className="nav-item" href="#analysis"><Terminal size={17} /> CLI scanner <span className="soon-tag">BETA</span></a>
+          <button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}><LayoutDashboard size={17} /> Overview {page === "overview" && <span className="nav-pip" />}</button>
+          <button className={`nav-item ${page === "projects" ? "active" : ""}`} onClick={() => setPage("projects")}><Boxes size={17} /> Projects</button>
+          <button className={`nav-item ${page === "reviews" ? "active" : ""}`} onClick={() => setPage("reviews")}><GitPullRequest size={17} /> Code reviews</button>
+          <button className={`nav-item ${page === "findings" ? "active" : ""}`} onClick={() => setPage("findings")}><Bug size={17} /> Findings</button>
+          <button className={`nav-item ${page === "scanner" ? "active" : ""}`} onClick={() => setPage("scanner")}><Terminal size={17} /> CLI scanner</button>
         </nav>
         <p className="nav-label nav-label-spaced">DEVELOP</p>
         <nav className="side-nav" aria-label="Developer links">
-          <a className="nav-item" href="#architecture"><Code2 size={17} /> API & integrations</a>
+          <button className={`nav-item ${page === "integrations" ? "active" : ""}`} onClick={() => setPage("integrations")}><Code2 size={17} /> API & integrations</button>
           <a className="nav-item" href="https://github.com/nischalk987/CodeGuardAI/issues" target="_blank" rel="noreferrer"><BookOpenCheck size={17} /> Project roadmap <ArrowUpRight className="external-icon" size={14} /></a>
         </nav>
         <div className="sidebar-bottom">
           <div className="usage-card"><div className="usage-head"><span>MONTHLY ANALYSIS</span><Zap size={14} /></div><div className="usage-numbers"><strong>128</strong><span>/ 500 sample scans</span></div><div className="usage-track"><span /></div><p>Illustrative workspace metric</p></div>
-          <a className="nav-item settings-link" href="#architecture"><Activity size={17} /> System status <span className="status-dot" /></a>
+          <button className={`nav-item settings-link ${page === "status" ? "active" : ""}`} onClick={() => setPage("status")}><Activity size={17} /> System status <span className="status-dot" /></button>
           <div className="profile-row"><div className="profile-avatar">CG</div><div className="profile-meta"><strong>CodeGuard Dev</strong><span>Builder workspace</span></div><ChevronDown size={15} /></div>
         </div>
       </aside>
 
       <main className="main-area" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div>
+          <div className="breadcrumb">Workspace <span>/</span> <strong>{{overview:"Overview",projects:"Projects",reviews:"Code reviews",findings:"Findings",scanner:"CLI scanner",integrations:"API & integrations",status:"System status"}[page]}</strong></div>
           <div className="topbar-actions">
             <span className={`connection-pill ${apiConnected ? "connected" : "demo"}`} role="status" aria-live="polite">
               <span className="status-dot" />{loading ? "Loading sample…" : apiConnected ? "Sample API loaded" : "Demo mode"}
@@ -141,7 +145,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="content-wrap">
+        <>{page === "overview" ? <div className="content-wrap">
           <section className="welcome-row">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> CODE INTELLIGENCE, REIMAGINED</div>
@@ -257,7 +261,7 @@ export default function App() {
           </section>
 
           <footer className="page-footer"><span>© 2026 CodeGuard AI <span className="footer-dot">·</span> Built for developers, by developers.</span><span><span className="footer-live-dot" /> Starter environment <span className="footer-dot">·</span> <a href="https://github.com/nischalk987/CodeGuardAI" target="_blank" rel="noreferrer">GitHub repository <ArrowUpRight size={11} /></a></span></footer>
-        </div>
+        </div> : <div className="content-wrap"><WorkspaceView page={page === "overview" ? "projects" : page} onNavigate={setPage} /></div>}</>
       </main>
       {showToast && <div className="toast" role="status"><Check size={17} /><div><strong>Demo review walkthrough</strong><span>This sample review uses labelled illustrative findings and excerpts, not analysis of your code.</span></div><button onClick={() => setShowToast(false)} aria-label="Dismiss walkthrough message">×</button></div>}
       <a className="floating-terminal" href="https://github.com/nischalk987/CodeGuardAI/tree/main/backend" target="_blank" rel="noreferrer"><Terminal size={15} /> CLI docs</a>
