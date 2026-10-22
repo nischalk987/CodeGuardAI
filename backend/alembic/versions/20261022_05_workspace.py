@@ -24,12 +24,15 @@ def upgrade() -> None:
         sa.UniqueConstraint("owner_user_id", "url", name="uq_user_repository_url"),
     )
     op.create_index("ix_user_repositories_owner_user_id", "user_repositories", ["owner_user_id"])
-    op.add_column("reviews", sa.Column("owner_user_id", sa.String(length=36), nullable=True))
-    op.create_foreign_key(
-        "fk_reviews_owner_user_id_users", "reviews", "users",
-        ["owner_user_id"], ["id"], ondelete="SET NULL",
-    )
-    op.create_index("ix_reviews_owner_user_id", "reviews", ["owner_user_id"])
+    # Batch mode uses SQLite's copy-and-move strategy in CI while still producing
+    # a normal ALTER TABLE on PostgreSQL.
+    with op.batch_alter_table("reviews") as batch_op:
+        batch_op.add_column(sa.Column("owner_user_id", sa.String(length=36), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_reviews_owner_user_id_users", "users",
+            ["owner_user_id"], ["id"], ondelete="SET NULL",
+        )
+        batch_op.create_index("ix_reviews_owner_user_id", ["owner_user_id"])
 
 
 def downgrade() -> None:
