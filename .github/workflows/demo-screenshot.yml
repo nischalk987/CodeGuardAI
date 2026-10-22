@@ -26,6 +26,13 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm install
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.55.0-${{ runner.os }}
+      - name: Install headless Chromium
+        run: npx --yes playwright@1.55.0 install chromium
       - name: Start the Vite demo
         working-directory: frontend
         run: |
@@ -38,13 +45,11 @@ jobs:
           done
           cat /tmp/codeguard-vite.log
           exit 1
-      - name: Install headless Chromium
-        run: npx --yes playwright install --with-deps chromium
       - name: Capture the actual dashboard demo
         working-directory: frontend
         run: |
           mkdir -p ../artifacts
-          npx --yes playwright screenshot --browser chromium --viewport-size "1440,1000" --full-page --wait-for-timeout 2500 http://127.0.0.1:5173/ ../artifacts/codeguard-dashboard-demo.png
+          npx --yes playwright@1.55.0 screenshot --browser chromium --viewport-size "1440,1000" --full-page --wait-for-timeout 2500 http://127.0.0.1:5173/ ../artifacts/codeguard-dashboard-demo.png
       - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:
