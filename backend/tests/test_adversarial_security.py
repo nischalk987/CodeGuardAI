@@ -60,7 +60,9 @@ def test_adversarial_fixture_is_passed_as_data_and_not_executed():
     source = (Path(__file__).parent / "fixtures" / "prompt_injection.py").read_text(encoding="utf-8")
     reviewer, client = make_reviewer()
     assert asyncio.run(reviewer.review(file_path="prompt_injection.py", source_code=source)) == []
-    assert source in client.calls[0]["messages"][1]["content"]
+    user_prompt = client.calls[0]["messages"][1]["content"]
+    payload = json.loads(user_prompt.split("data:\\n", 1)[1])
+    assert payload["source_code"] == source
     assert client.calls[0]["messages"][0]["role"] == "system"
 
 
