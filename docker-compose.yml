@@ -18,7 +18,31 @@ services:
     ports:
       - "8000:8000"
     depends_on:
+    
+  worker:
+    build:
+      context: ./backend
+    command: ["celery", "-A", "app.jobs.queue:celery_app", "worker", "--loglevel=INFO", "--queues=reviews", "--pool=solo"]
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      FRONTEND_ORIGIN: http://localhost:5173
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      DATABASE_URL: postgresql+psycopg://codeguard:codeguard@postgres:5432/codeguard
+      REDIS_URL: redis://redis:6379/0
+      AI_PROVIDER: groq
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
