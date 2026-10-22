@@ -32,10 +32,8 @@ def _authenticated_client(database, monkeypatch):
     return TestClient(app), token
 
 
-def test_oauth_start_requires_signed_in_user(migrated_database):
-    app = create_app(Settings(_env_file=None, environment="test"))
-    with TestClient(app) as client:
-        response = client.get("/api/v1/github/oauth/start")
+def test_oauth_start_requires_signed_in_user(review_client):
+    response = review_client.get("/api/v1/github/oauth/start")
     assert response.status_code == 401
 
 
