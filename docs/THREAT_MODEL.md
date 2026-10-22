@@ -19,7 +19,7 @@ CodeGuard AI accepts source code and pull-request diffs that may be attacker-con
 - **Prompt injection in source/diffs:** system instructions explicitly mark repository-provided content as untrusted. Source is JSON-serialized and supplied as user content. Prompt wording is not a security sandbox, so model output must still be validated.
 - **Hidden prompt or credential extraction:** credentials are configured server-side and not included in review input. Provider adapters map failures to safe exception types and avoid logging exception content.
 - **Malformed or malicious model output:** strict response schemas reject extra fields and invalid values. The pipeline checks file scope, line bounds and cited evidence within supplied source lines. Invalid output is rejected rather than repaired or retried.
-- **Resource exhaustion:** request body size, AI input bytes, file path length, provider timeouts and retry counts are bounded; exponential backoff is capped. Review-create rate limiting limits frequency. Worker/process concurrency must also be configured appropriately at deployment.
+- **Resource exhaustion:** request body size, AI input bytes, file path length, provider timeouts and retry counts are bounded; exponential backoff is capped. Review-create rate limiting limits request frequency, and a configurable semaphore bounds in-flight provider calls per reviewer instance (default 4, allowed range 1–32). Worker/process concurrency must also be configured appropriately at deployment.
 - **Secret leakage:** logs redact common bearer and key/value token forms. Evidence is redacted in the local review workflow. Regex masking is best-effort and cannot identify every credential format, so source must not be logged.
 - **Unsafe fixes:** suggested fixes remain finding text. Application code never evaluates or applies them.
 
@@ -29,4 +29,4 @@ Run `pytest backend/tests/test_adversarial_security.py` from the repository root
 
 ## Residual risks
 
-Prompt injection cannot be solved by prompt text alone. Secret-pattern matching can miss unknown formats. There is no dedicated global AI-review semaphore; configure API/worker concurrency according to resource budgets. Human review is required before suggested code changes are applied.
+Prompt injection cannot be solved by prompt text alone. Secret-pattern matching can miss unknown formats. The semaphore is per reviewer instance rather than global across all worker processes; configure API/worker concurrency according to resource budgets. Human review is required before suggested code changes are applied.
