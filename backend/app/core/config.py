@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     ai_review_max_input_bytes: int = Field(
         default=40_000, validation_alias="AI_REVIEW_MAX_INPUT_BYTES", ge=1, le=200_000
     )
+    ai_review_max_concurrency: int = Field(
+        default=4, validation_alias="AI_REVIEW_MAX_CONCURRENCY", ge=1, le=32
+    )
     github_app_id: str | None = Field(default=None, validation_alias="GITHUB_APP_ID")
     github_private_key_path: str | None = Field(default=None, validation_alias="GITHUB_PRIVATE_KEY_PATH")
     github_webhook_secret: SecretStr | None = Field(
