@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from app.ai.exceptions import AIReviewerError, AIReviewerNotConfigured
 from app.analysis import BuiltinAnalyzer
 from app.analysis.base import AnalyzerError
+from app.core.config import Settings
 from app.core.logging import redact_sensitive_text
+from app.infrastructure.ai.factory import create_ai_reviewer
 from app.domain import (
     Finding,
     Review,
@@ -47,6 +52,9 @@ class ReviewNotFound(LookupError):
         super().__init__("Review not found")
 
 
+logger = logging.getLogger(__name__)
+
+
 class ReviewService:
     """Bounded local static review creation and persistent review-history operations."""
 
@@ -66,6 +74,8 @@ class ReviewService:
             created_at=now,
             updated_at=now,
             correlation_id=correlation_id,
+            ai_review_requested=request.ai_review,
+            ai_review_status="pending" if request.ai_review else "disabled",
         )
 
     def execute_queued(self, review_id: str, request: ReviewCreateRequest) -> Review:
@@ -92,9 +102,46 @@ class ReviewService:
             self._repository.save(failed)
             return failed
 
-        review = review.with_findings(findings).complete(
-            summary="Completed a local deterministic scan. No AI provider was called."
+        ai_status = "disabled"
+        ai_message = None
+        if request.ai_review:
+            try:
+                reviewer = create_ai_reviewer(Settings())
+                ai_findings = asyncio.run(
+                    reviewer.review(file_path=request.file_path, source_code=request.source_code)
+                )
+                # Model findings remain labelled hypotheses alongside deterministic findings.
+                findings = (*findings, *ai_findings)
+                ai_status = "completed"
+                ai_message = "AI findings are suggestions/hypotheses. Verify them independently."
+            except AIReviewerNotConfigured:
+                ai_status = "unavailable"
+                ai_message = "AI review is not configured. Deterministic findings are still available."
+            except AIReviewerError as exc:
+                ai_status = "failed"
+                ai_message = f"{exc.safe_message}. Deterministic findings are still available."
+                logger.warning("Optional AI review failed", extra={"error_type": type(exc).__name__})
+            except Exception as exc:
+                # A provider outage must never discard or fail deterministic findings.
+                ai_status = "failed"
+                ai_message = "AI review failed. Deterministic findings are still available."
+                logger.warning("Optional AI review failed", extra={"error_type": type(exc).__name__})
+
+        review = replace(
+            review,
+            ai_review_requested=request.ai_review,
+            ai_review_status=ai_status,
+            ai_review_message=ai_message,
         )
+        if ai_status == "completed":
+            summary_text = "Completed deterministic checks with optional advisory AI suggestions."
+        elif not request.ai_review:
+            summary_text = "Completed deterministic checks. AI review was not requested."
+        elif ai_status == "unavailable":
+            summary_text = "Completed deterministic checks. Optional AI reviewer is unavailable."
+        else:
+            summary_text = "Completed deterministic checks. Optional AI review failed."
+        review = review.with_findings(findings).complete(summary=summary_text)
         self._repository.save(review)
         return review
 

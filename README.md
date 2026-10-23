@@ -122,7 +122,7 @@ codeguard scan tests/fixtures/static_sample.py --format json
 
 Use `codeguard scan --help` for analyzer, ignore-path, output-format, and severity-threshold options. Semgrep needs to be installed separately when choosing that analyzer.
 
-AI review is a separate, explicit opt-in and supports one source file at a time. Configure either `GROQ_API_KEY` or `HF_TOKEN` privately in the backend environment, select the provider, and run:
+AI review is optional in both the CLI and persisted review workflow. In the workspace, select **Enable optional AI suggestions** before queuing a review. Deterministic checks always run independently; if provider credentials are missing or AI fails, the review still completes with deterministic findings and an explicit AI status. AI findings are labelled as hypotheses and suggestions, explain likely impact, and include example fixes where useful. Suggested code is never applied automatically. Hosted AI receives the selected source file. Configure either `GROQ_API_KEY` or `HF_TOKEN` privately in the backend environment for AI suggestions. CLI opt-in example:
 
 ```bash
 codeguard scan tests/fixtures/static_sample.py --ai-review
