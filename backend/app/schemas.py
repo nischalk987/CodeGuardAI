@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 Severity = Literal["critical", "high", "medium", "low"]
 FindingSource = Literal["static", "ai"]
-AIReviewStatus = Literal["disabled", "completed", "unavailable", "failed"]
+AIReviewStatus = Literal["disabled", "pending", "completed", "unavailable", "failed"]
 SUPPORTED_REVIEW_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
 
 
