@@ -193,3 +193,39 @@ def test_queue_failure_is_persisted_and_visible_in_review_detail(
     assert detail.json()["status"] == "failed"
     assert detail.json()["repository"] == "example/payments"
     assert detail.json()["branch"] == "feature/retry"
+
+
+
+def test_optional_ai_failure_preserves_deterministic_review(
+    review_client: TestClient, migrated_database, monkeypatch
+) -> None:
+    from app.ai.exceptions import AIReviewerNotConfigured
+    from app.application import reviews as review_application
+    from app.application.reviews import ReviewService
+    from app.infrastructure.persistence.repository import SqlAlchemyReviewRepository
+    from app.schemas import ReviewCreateRequest
+
+    def no_provider(_settings):
+        raise AIReviewerNotConfigured()
+
+    monkeypatch.setattr(review_application, "create_ai_reviewer", no_provider)
+    payload = {
+        "source_code": 'password = "private-value-example"\\n',
+        "file_path": "src/auth.py",
+        "repository": "example/payments",
+        "branch": "feature/ai",
+        "ai_review": True,
+    }
+    created = review_client.post("/api/v1/reviews", json=payload)
+    assert created.status_code == 202
+    assert created.json()["ai_review_requested"] is True
+    assert created.json()["ai_review_status"] == "pending"
+
+    with migrated_database() as session:
+        result = ReviewService(SqlAlchemyReviewRepository(session)).execute_queued(
+            created.json()["review_id"], ReviewCreateRequest.model_validate(payload)
+        )
+    assert result.status.value == "completed"
+    assert result.ai_review_status == "unavailable"
+    assert result.ai_review_message
+    assert any(finding.source.value == "static" for finding in result.findings)
