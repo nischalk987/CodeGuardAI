@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   Activity, CircleAlert, ExternalLink, FolderGit2, GitBranch, LoaderCircle, Plus,
-  RefreshCw, ScanLine, Trash2, Github, FileCode2, ShieldCheck, Unplug, ChevronLeft,
+  RefreshCw, ScanLine, Trash2, Github, FileCode2, ShieldCheck, Unplug, ChevronLeft, Filter,
 } from "lucide-react";
 import { readAuthToken } from "./AuthPage";
 
@@ -12,6 +12,7 @@ type SourceFile = { path:string; size:number };
 type Finding = { id:string; severity:"critical"|"high"|"medium"|"low"; category:string; file_path:string; line:number; title:string; message:string; explanation:string; suggested_fix:string; source:"static"|"ai"; confidence:number };
 type Review = { review_id:string; repository:string; branch:string; ai_review_requested?:boolean; ai_review_status?:"disabled"|"pending"|"completed"|"unavailable"|"failed"; ai_review_message?:string|null; status:"queued"|"running"|"completed"|"failed"; risk_score:number; created_at:string; updated_at?:string; summary?:{critical:number;high:number;medium:number;low:number;total_findings:number}; findings?:Finding[]; failure_reason?:string|null; correlation_id?:string|null };
 type Tab = "projects" | "reviews" | "scan";
+type SeverityFilter = "all" | Finding["severity"];
 const terminal=(s:Review["status"])=>s==="completed"||s==="failed";
 const message=(e:unknown,fallback:string)=>e instanceof Error?e.message:fallback;
 const encoded=(s:string)=>encodeURIComponent(s);
@@ -33,6 +34,8 @@ export default function WorkspaceView({userName}:{userName:string}){
   const [tab,setTab]=useState<Tab>("projects");
   const [repos,setRepos]=useState<Repo[]>([]);
   const [reviews,setReviews]=useState<Review[]>([]);
+  const [repositoryFilter,setRepositoryFilter]=useState("all");
+  const [severityFilter,setSeverityFilter]=useState<SeverityFilter>("all");
   const [selectedReviewId,setSelectedReviewId]=useState("");
   const [selectedReview,setSelectedReview]=useState<Review|null>(null);
   const [detailLoading,setDetailLoading]=useState(false);
@@ -58,10 +61,26 @@ export default function WorkspaceView({userName}:{userName:string}){
   const [selectedFile,setSelectedFile]=useState("");
   const [githubBusy,setGithubBusy]=useState(false);
 
+  const recentReviews = reviews.slice(0, 5);
+  const filteredReviews = reviews.filter(review =>
+    (repositoryFilter === "all" || review.repository === repositoryFilter) &&
+    (severityFilter === "all" || (review.findings || []).some(finding => finding.severity === severityFilter))
+  );
+  const reviewStats = {
+    total: reviews.length,
+    completed: reviews.filter(review => review.status === "completed").length,
+    active: reviews.filter(review => review.status === "queued" || review.status === "running").length,
+    failed: reviews.filter(review => review.status === "failed").length,
+    findings: reviews.reduce((sum, review) => sum + (review.summary?.total_findings ?? review.findings?.length ?? 0), 0),
+    critical: reviews.reduce((sum, review) => sum + (review.summary?.critical ?? review.findings?.filter(f => f.severity === "critical").length ?? 0), 0),
+    high: reviews.reduce((sum, review) => sum + (review.summary?.high ?? review.findings?.filter(f => f.severity === "high").length ?? 0), 0),
+  };
+  const repositoryOptions = [...new Set(reviews.map(review => review.repository).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
   const refresh=useCallback(async()=>{
     setLoading(true);setError("");
     try{
-      const [r,v]=await Promise.all([api<Repo[]>("/api/v1/workspace/repositories"),api<Review[]>("/api/v1/workspace/reviews")]);
+      const [r,v]=await Promise.all([api<Repo[]>("/api/v1/workspace/repositories"),api<Review[]>("/api/v1/reviews?limit=100")]);
       setRepos(r);setReviews(v);
     }catch(e){setError(message(e,"Unable to load your workspace."));}
     finally{setLoading(false);}
@@ -197,7 +216,20 @@ export default function WorkspaceView({userName}:{userName:string}){
 
   return <section className="workspace-live">
     <div className="workspace-live-heading"><div><span className="section-kicker">PERSONAL WORKSPACE</span><h1>Welcome, {userName}</h1><p>Start code reviews and follow live status, findings, severity, file paths and line numbers.</p></div><button className="secondary-button" onClick={()=>void refresh()} disabled={loading}><RefreshCw size={14}/> Refresh</button></div>
-    <div className="workspace-live-tabs"><button className={tab==="projects"?"selected":""} onClick={()=>{setTab("projects");setError("");}}><FolderGit2 size={15}/> Projects</button><button className={tab==="reviews"?"selected":""} onClick={()=>{setTab("reviews");setError("");}}><Activity size={15}/> Review history</button><button className={tab==="scan"?"selected":""} onClick={()=>{setTab("scan");setError("");}}><ScanLine size={15}/> Scan code</button></div>
+    <div className="workspace-live-tabs"><button className={tab==="projects"?"selected":""} onClick={()=>{setTab("projects");setError("");}}><FolderGit2 size={15}/> Projects</button><button className={tab==="reviews"?"selected":""} onClick={()=>{setSelectedReviewId("");setSelectedReview(null);setTab("reviews");setError("");}}><Activity size={15}/> Review history</button><button className={tab==="scan"?"selected":""} onClick={()=>{setTab("scan");setError("");}}><ScanLine size={15}/> Scan code</button></div>
+    {!loading&&<section className="workspace-dashboard" aria-label="Workspace review statistics">
+      <div className="workspace-dashboard-heading"><div><span className="section-kicker">LIVE WORKSPACE</span><h2>Review activity</h2><p>Metrics are calculated from reviews saved to your account, not demo data.</p></div><span className="workspace-live-data-badge"><span/> Persisted data</span></div>
+      <div className="workspace-dashboard-metrics">
+        <article><span>Total reviews</span><strong>{reviewStats.total}</strong><small>All saved reviews</small></article>
+        <article><span>Completed</span><strong>{reviewStats.completed}</strong><small>Successfully analyzed</small></article>
+        <article><span>In progress</span><strong>{reviewStats.active}</strong><small>Queued or running</small></article>
+        <article><span>Findings</span><strong>{reviewStats.findings}</strong><small>{reviewStats.critical} critical · {reviewStats.high} high</small></article>
+      </div>
+      <div className="workspace-dashboard-recent"><div className="workspace-dashboard-section-heading"><div><h3>Recent reviews</h3><p>Latest five reviews, newest first.</p></div><button className="secondary-button" onClick={()=>{setSelectedReviewId("");setSelectedReview(null);setTab("reviews");}}>View history <ExternalLink size={13}/></button></div>
+      {recentReviews.length===0?<div className="workspace-dashboard-empty"><Activity size={20}/><div><strong>No review activity yet</strong><p>Scan a source file to generate your first real review. Demo findings are intentionally excluded from these metrics.</p></div><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Start first review</button></div>:<div className="workspace-dashboard-recent-list">{recentReviews.map(review=><button type="button" key={review.review_id} onClick={()=>{setSelectedReview(null);void loadReview(review.review_id);}}><span className="workspace-dashboard-review-main"><strong>{review.repository}</strong><small>{review.branch} · {new Date(review.created_at).toLocaleString()}</small></span><span className={`workspace-live-status status-${review.status}`}>{review.status}</span><span className="workspace-dashboard-review-risk">{review.summary?.total_findings ?? review.findings?.length ?? 0} findings</span><span className="workspace-open-review">Open <ExternalLink size={12}/></span></button>)}</div>}
+      {reviewStats.failed>0&&<p className="workspace-dashboard-footnote">{reviewStats.failed} review{reviewStats.failed===1?"":"s"} failed. Open review history to inspect failure details.</p>}
+      </div>
+    </section>}
     {error&&<div className="workspace-live-error" role="alert"><CircleAlert size={16}/>{error}</div>}
     {notice&&<div className="workspace-live-notice" role="status">{notice}</div>}
     {loading?<div className="workspace-live-empty"><LoaderCircle className="auth-spinner" size={22}/> Loading your account data…</div>:null}
@@ -211,7 +243,7 @@ export default function WorkspaceView({userName}:{userName:string}){
       {repos.length===0?<div className="workspace-live-empty"><FolderGit2 size={28}/><h3>No saved shortcuts</h3><p>Connect GitHub above to browse repositories, or save a URL shortcut to find it quickly later.</p></div>:<div className="workspace-live-grid">{repos.map(repo=><article className="workspace-live-card" key={repo.id}><FolderGit2 size={20}/><h3>{repo.name}</h3><a href={repo.url} target="_blank" rel="noreferrer">{repo.url.replace("https://github.com/","")} <ExternalLink size={12}/></a><span><GitBranch size={13}/>{repo.default_branch}</span><small>Saved {new Date(repo.created_at).toLocaleDateString()}</small><button className="workspace-live-remove" onClick={()=>void removeRepo(repo.id)}><Trash2 size={14}/> Remove</button></article>)}</div>}
     </>}
     {!loading&&tab==="reviews"&&<>
-      {selectedReviewId&&selectedReview?<section className="review-detail-panel">
+      {detailLoading&&!selectedReview?<div className="workspace-live-empty"><LoaderCircle className="auth-spinner" size={22}/><h3>Loading review details</h3><p>Fetching the selected review from saved workspace data.</p></div>:selectedReviewId&&selectedReview?<section className="review-detail-panel">
         <button className="secondary-button" onClick={()=>{setSelectedReviewId("");setSelectedReview(null);}}><ChevronLeft size={14}/> Back to review history</button>
         <div className="review-detail-heading"><div><span className="section-kicker">REVIEW DETAILS</span><h2>{selectedReview.repository}</h2><p>{selectedReview.branch} · {selectedReview.review_id}</p></div><span className={`workspace-live-status status-${selectedReview.status}`}>{selectedReview.status}</span></div>
         <div className="review-progress" role="status"><span className={selectedReview.status==="queued"?"progress-current":""}>Queued</span><i/><span className={selectedReview.status==="running"?"progress-current":""}>Running</span><i/><span className={selectedReview.status==="completed"?"progress-current":selectedReview.status==="failed"?"progress-failed":""}>{selectedReview.status==="failed"?"Failed":"Completed"}</span><button className="secondary-button" onClick={()=>void refreshReviewDetail()}><RefreshCw size={13}/> Refresh status</button></div>
@@ -219,7 +251,9 @@ export default function WorkspaceView({userName}:{userName:string}){
         <div className="review-result-summary"><div><strong>{selectedReview.risk_score}</strong><small>Risk score / 100</small></div><div><strong>{selectedReview.summary?.total_findings??selectedReview.findings?.length??0}</strong><small>Total findings</small></div>{(["critical","high","medium","low"] as const).map(level=><div key={level}><strong>{selectedReview.summary?.[level]??selectedReview.findings?.filter(f=>f.severity===level).length??0}</strong><small>{level}</small></div>)}</div>
         <div className="review-ai-status" role="status"><strong>AI reviewer: {selectedReview.ai_review_requested ? (selectedReview.ai_review_status||"unavailable") : "not requested"}</strong><p>{selectedReview.ai_review_message || (selectedReview.ai_review_requested ? "AI status is not available for this review." : "Deterministic findings are shown independently of optional AI suggestions.")}</p>{selectedReview.ai_review_requested&&selectedReview.ai_review_status==="completed"&&<small>AI-generated findings are suggestions, not confirmed defects.</small>}</div><div className="review-findings-heading"><h3>Findings</h3><span>{selectedReview.status==="completed"?"Actual persisted analyzer results":selectedReview.status==="failed"?"Results unavailable":"Findings will appear when the review completes"}</span></div>
         {selectedReview.status==="completed"&&(selectedReview.findings||[]).length===0?<div className="workspace-live-empty"><ShieldCheck size={25}/><h3>No findings detected</h3><p>The analyzer did not return any findings for the submitted file.</p></div>:<div className="review-findings-list">{(selectedReview.findings||[]).map(finding=><article key={finding.id} className="review-finding-card"><div className="review-finding-top"><span className={`finding-severity severity-${finding.severity}`}>{finding.severity}</span><span>{finding.category}</span><span className={`finding-origin origin-${finding.source}`}>{finding.source==="ai"?"AI suggestion":"Deterministic"}</span><span className="review-finding-location"><FileCode2 size={13}/>{finding.file_path}:{finding.line}</span></div><h4>{finding.title}</h4><p>{finding.message}</p><details><summary>{finding.source==="ai"?"AI explanation and suggested fix":"Explanation and suggested fix"}</summary><p>{finding.source==="ai"?"AI-generated explanation (verify independently): ":""}{finding.explanation}</p><pre>{finding.suggested_fix}</pre>{finding.source==="ai"&&<small className="ai-advisory-note">Suggestion only. Not applied automatically.</small>}</details></article>)}</div>}
-      </section>:<><div className="workspace-live-summary"><strong>{reviews.length}</strong><span>reviews belonging to your account</span><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Start a review</button></div>{reviews.length===0?<div className="workspace-live-empty"><Activity size={28}/><h3>No real reviews yet</h3><p>Submit a source file in Scan code. Demo findings are not included in this history.</p><button className="primary-button" onClick={()=>setTab("scan")}>Scan code</button></div>:<div className="workspace-live-review-list">{reviews.map(r=><button type="button" key={r.review_id} className="workspace-review-row" onClick={()=>{setSelectedReview(null);void loadReview(r.review_id);}}><span><strong>{r.repository}</strong><small>{r.branch} · {new Date(r.created_at).toLocaleString()}</small><code>{r.review_id.slice(0,14)}</code></span><span className={`workspace-live-status status-${r.status}`}>{r.status}</span><span>Risk {r.risk_score}/100</span>{!terminal(r.status)&&<LoaderCircle size={15} className="auth-spinner"/>}<span className="workspace-open-review">Open details <ExternalLink size={12}/></span></button>)}</div>}</>}
+      </section>:<><div className="workspace-live-summary"><strong>{filteredReviews.length}</strong><span>matching reviews · {reviews.length} total in your account</span><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Start a review</button></div>
+      <div className="workspace-review-filters"><div><Filter size={15}/><strong>Filter review history</strong></div><label>Repository<select value={repositoryFilter} onChange={e=>setRepositoryFilter(e.target.value)}><option value="all">All repositories</option>{repositoryOptions.map(repo=><option key={repo} value={repo}>{repo}</option>)}</select></label><label>Severity<select value={severityFilter} onChange={e=>setSeverityFilter(e.target.value as SeverityFilter)}><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><button className="secondary-button" onClick={()=>{setRepositoryFilter("all");setSeverityFilter("all");}}>Reset filters</button></div>
+      {reviews.length===0?<div className="workspace-live-empty"><Activity size={28}/><h3>No real reviews yet</h3><p>Your dashboard is ready. Submit a source file in Scan code to create the first persisted review; sample/demo findings are not counted as workspace activity.</p><button className="primary-button" onClick={()=>setTab("scan")}><ScanLine size={14}/> Scan your first file</button></div>:filteredReviews.length===0?<div className="workspace-live-empty"><Filter size={26}/><h3>No reviews match these filters</h3><p>Try another repository or severity. Severity filters match reviews that contain at least one finding at that severity.</p><button className="secondary-button" onClick={()=>{setRepositoryFilter("all");setSeverityFilter("all");}}>Clear filters</button></div>:<div className="workspace-live-review-list">{filteredReviews.map(r=><button type="button" key={r.review_id} className="workspace-review-row" onClick={()=>{setSelectedReview(null);void loadReview(r.review_id);}}><span><strong>{r.repository}</strong><small>{r.branch} · {new Date(r.created_at).toLocaleString()}</small><code>{r.review_id.slice(0,14)}</code></span><span className={`workspace-live-status status-${r.status}`}>{r.status}</span><span>Risk {r.risk_score}/100</span>{!terminal(r.status)&&<LoaderCircle size={15} className="auth-spinner"/>}<span className="workspace-open-review">Open details <ExternalLink size={12}/></span></button>)}</div>}</>}
     </>}
     {!loading&&tab==="scan"&&<form className="workspace-live-scan" onSubmit={startScan}><div><span className="section-kicker">DETERMINISTIC REVIEW</span><h2>Review selected source</h2><p>Confirm the selected source before queueing. The existing API queues real deterministic checks; a running Redis/Celery worker is required.</p></div><div className="workspace-live-scan-fields"><label>Repository label<input value={repository} onChange={e=>setRepository(e.target.value)} maxLength={200}/></label><label>Branch<input value={scanBranch} onChange={e=>setScanBranch(e.target.value)} maxLength={255}/></label><label>File path<input value={filePath} onChange={e=>setFilePath(e.target.value)} required/></label></div><label className="ai-review-toggle"><input type="checkbox" checked={aiReviewEnabled} onChange={e=>setAiReviewEnabled(e.target.checked)}/> Enable optional AI suggestions <small>Deterministic checks always run; AI may be unavailable.</small></label><label>Source code<textarea value={source} onChange={e=>setSource(e.target.value)} required maxLength={40000} rows={12} placeholder={"Load a GitHub file above, or paste a source file here.\ndef example():\n    return True"}/><small>{new TextEncoder().encode(source).length.toLocaleString()} / 40,000 bytes</small></label><button className="primary-button" type="submit" disabled={busy||!source.trim()}>{busy?<LoaderCircle size={15} className="auth-spinner"/>:<ScanLine size={15}/>} Queue review</button></form>}
   </section>;
