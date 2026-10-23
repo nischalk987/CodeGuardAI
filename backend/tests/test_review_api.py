@@ -210,7 +210,7 @@ def test_optional_ai_failure_preserves_deterministic_review(
 
     monkeypatch.setattr(review_application, "create_ai_reviewer", no_provider)
     payload = {
-        "source_code": 'password = "private-value-example"\\n',
+        "source_code": 'password = "private-value-example"\n',
         "file_path": "src/auth.py",
         "repository": "example/payments",
         "branch": "feature/ai",
