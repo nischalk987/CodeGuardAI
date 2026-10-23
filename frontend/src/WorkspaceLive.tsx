@@ -80,7 +80,7 @@ export default function WorkspaceView({userName}:{userName:string}){
   const refresh=useCallback(async()=>{
     setLoading(true);setError("");
     try{
-      const [r,v]=await Promise.all([api<Repo[]>("/api/v1/workspace/repositories"),api<Review[]>("/api/v1/workspace/reviews")]);
+      const [r,v]=await Promise.all([api<Repo[]>("/api/v1/workspace/repositories"),api<Review[]>("/api/v1/reviews?limit=100")]);
       setRepos(r);setReviews(v);
     }catch(e){setError(message(e,"Unable to load your workspace."));}
     finally{setLoading(false);}
