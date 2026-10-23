@@ -229,3 +229,10 @@ def test_optional_ai_failure_preserves_deterministic_review(
     assert result.ai_review_status == "unavailable"
     assert result.ai_review_message
     assert any(finding.source.value == "static" for finding in result.findings)
+
+    detail = review_client.get(f"/api/v1/reviews/{created.json()['review_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "completed"
+    assert detail.json()["ai_review_requested"] is True
+    assert detail.json()["ai_review_status"] == "unavailable"
+    assert any(item["source"] == "static" for item in detail.json()["findings"])
