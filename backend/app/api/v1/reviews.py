@@ -282,6 +282,9 @@ def _to_response(review: ReviewEntity) -> Review:
         findings=findings,
         correlation_id=review.correlation_id,
         failure_reason=review.failure_reason,
+        ai_review_requested=review.ai_review_requested,
+        ai_review_status=review.ai_review_status,
+        ai_review_message=review.ai_review_message,
     )
 
 
