@@ -5,18 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import replace
-
-from app.ai.exceptions import AIReviewerError, AIReviewerNotConfigured
-from app.core.config import Settings
-from app.infrastructure.ai.factory import create_ai_reviewer
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from app.ai.exceptions import AIReviewerError, AIReviewerNotConfigured
 from app.analysis import BuiltinAnalyzer
 from app.analysis.base import AnalyzerError
+from app.core.config import Settings
 from app.core.logging import redact_sensitive_text
+from app.infrastructure.ai.factory import create_ai_reviewer
 from app.domain import (
     Finding,
     Review,
