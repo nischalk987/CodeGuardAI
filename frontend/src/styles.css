@@ -231,3 +231,15 @@
 .review-finding-card pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#d5e3cc;background:#17211a;padding:10px;border-radius:6px;font-size:10px}
 @media(max-width:850px){.workspace-review-row{grid-template-columns:minmax(0,1fr) auto}.workspace-open-review{grid-column:1/-1}.review-result-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.review-progress>.secondary-button{margin-left:0}}
 @media(max-width:540px){.review-detail-panel{padding:13px}.review-detail-heading{display:grid}.review-result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-finding-location{width:100%;margin-left:0}.workspace-review-row{gap:9px;padding:12px}}
+
+/* Issue #36: optional AI results remain visually separate from deterministic findings */
+.ai-review-toggle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;border:1px solid #334331;border-radius:8px;background:#131d16;color:#c7f5a2;font-size:11px}
+.ai-review-toggle input{width:15px;height:15px;accent-color:#b7f56e}
+.ai-review-toggle small{width:100%;color:#899b88;font-size:10px;line-height:1.6}
+.review-ai-status{padding:12px 14px;border:1px solid #314034;border-radius:8px;background:#141d17}
+.review-ai-status strong{color:#c7f5a2;font-size:11px;text-transform:capitalize}
+.review-ai-status p{margin:6px 0 0;color:#a1ad9b;font-size:10px;line-height:1.65}
+.review-ai-status>small,.ai-advisory-note{display:block;margin-top:7px;color:#e3c783;font-size:9px;line-height:1.6}
+.finding-origin{padding:4px 7px;border:1px solid #343f4b;border-radius:4px;color:#b2c1d1;font-size:9px;text-transform:uppercase}
+.finding-origin.origin-ai{border-color:#61503a;background:#2b2419;color:#f3ce8a}
+.finding-origin.origin-static{border-color:#344c36;background:#18251a;color:#b7e9a2}
